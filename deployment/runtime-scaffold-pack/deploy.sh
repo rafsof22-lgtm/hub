@@ -9,6 +9,15 @@ if [ ! -f .env.production ]; then
   exit 1
 fi
 
+required_env="DOMAIN BASE_URL JOB_SIGNING_SECRET POSTGRES_PASSWORD"
+for name in $required_env; do
+  value="$(grep -E "^${name}=" .env.production | tail -n 1 | cut -d= -f2- || true)"
+  if [ -z "$value" ]; then
+    echo "[deploy] .env.production is missing required value: ${name}"
+    exit 1
+  fi
+done
+
 if grep -Eq 'YOUR-|change-me|change_me|example\.com' .env.production; then
   echo "[deploy] .env.production still contains placeholder values"
   echo "Fill DOMAIN, BASE_URL, JOB_SIGNING_SECRET, and POSTGRES_PASSWORD before production deploy."
