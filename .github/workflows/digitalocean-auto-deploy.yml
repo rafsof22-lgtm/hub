@@ -38,7 +38,7 @@ jobs:
           set -eu
 
           if [ -z "$DIGITALOCEAN_SSH_KEY" ]; then
-            echo "DIGITALOCEAN_SSH_KEY secret is required"
+            echo "DIGITALOCEAN_SSH_KEY must be saved as an Actions Secret, not a Variable"
             exit 1
           fi
 
@@ -72,16 +72,16 @@ jobs:
 
       - name: Deploy to DigitalOcean droplet over SSH
         env:
-          DIGITALOCEAN_HOST: ${{ secrets.DIGITALOCEAN_HOST }}
-          DIGITALOCEAN_USER: ${{ secrets.DIGITALOCEAN_USER }}
-          DIGITALOCEAN_PORT: ${{ secrets.DIGITALOCEAN_PORT }}
-          APP_DIR: ${{ secrets.APP_DIR }}
+          DIGITALOCEAN_HOST: ${{ vars.DIGITALOCEAN_HOST || secrets.DIGITALOCEAN_HOST }}
+          DIGITALOCEAN_USER: ${{ vars.DIGITALOCEAN_USER || secrets.DIGITALOCEAN_USER }}
+          DIGITALOCEAN_PORT: ${{ vars.DIGITALOCEAN_PORT || secrets.DIGITALOCEAN_PORT }}
+          APP_DIR: ${{ vars.APP_DIR || secrets.APP_DIR }}
         run: |
           set -eu
 
           for required in DIGITALOCEAN_HOST DIGITALOCEAN_USER DIGITALOCEAN_PORT APP_DIR; do
             if [ -z "${!required}" ]; then
-              echo "$required secret is required"
+              echo "$required must be saved as an Actions Variable or Secret"
               exit 1
             fi
           done
@@ -114,12 +114,12 @@ jobs:
 
       - name: Post-deploy live endpoint checks
         env:
-          BASE_URL: ${{ secrets.BASE_URL }}
+          BASE_URL: ${{ vars.BASE_URL || secrets.BASE_URL }}
         run: |
           set -eu
 
           if [ -z "$BASE_URL" ]; then
-            echo "BASE_URL secret is required"
+            echo "BASE_URL must be saved as an Actions Variable or Secret"
             exit 1
           fi
 
