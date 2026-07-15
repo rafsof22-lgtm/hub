@@ -29,6 +29,14 @@ else
   exit 1
 fi
 
+echo "[deploy] freeing host ports 80 and 443 for Docker Caddy"
+for service in caddy nginx apache2; do
+  if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files "${service}.service" >/dev/null 2>&1; then
+    systemctl stop "$service" 2>/dev/null || true
+    systemctl disable "$service" 2>/dev/null || true
+  fi
+done
+
 echo "[deploy] pulling latest images"
 $COMPOSE_CMD --env-file .env.production -f docker-compose.prod.yml pull || true
 
