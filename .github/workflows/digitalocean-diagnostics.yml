@@ -38,14 +38,18 @@ jobs:
           DIGITALOCEAN_DROPLET_ID: ${{ vars.DIGITALOCEAN_DROPLET_ID || secrets.DIGITALOCEAN_DROPLET_ID }}
         run: |
           set -eu
+          response_file="$(mktemp)"
           curl --fail --silent --show-error \
             -H "Authorization: Bearer ${DIGITALOCEAN_ACCESS_TOKEN}" \
             -H "Content-Type: application/json" \
             "https://api.digitalocean.com/v2/droplets/${DIGITALOCEAN_DROPLET_ID}" \
-            | python3 - <<'PY'
+            -o "$response_file"
+          python3 - "$response_file" <<'PY'
           import json
           import sys
-          data = json.load(sys.stdin)["droplet"]
+          from pathlib import Path
+
+          data = json.loads(Path(sys.argv[1]).read_text())["droplet"]
           public_v4 = [n["ip_address"] for n in data.get("networks", {}).get("v4", []) if n.get("type") == "public"]
           print(f"droplet_id={data['id']}")
           print(f"name={data['name']}")
