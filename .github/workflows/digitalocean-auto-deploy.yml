@@ -31,44 +31,92 @@ jobs:
           test -f deployment/runtime-scaffold-pack/services/xrp-hbar-apex/Dockerfile
           test -f deployment/runtime-scaffold-pack/services/xrp-hbar-apex/app.py
 
-      - name: Deploy to DigitalOcean droplet over SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.DIGITALOCEAN_HOST }}
-          username: ${{ secrets.DIGITALOCEAN_USER }}
-          key: ${{ secrets.DIGITALOCEAN_SSH_KEY }}
-          port: ${{ secrets.DIGITALOCEAN_PORT }}
-          script_stop: true
-          script: |
-            set -eu
-
-            APP_DIR="${{ secrets.APP_DIR }}"
-            REPO_URL="https://github.com/rafsof22-lgtm/hub.git"
-            BRANCH="main"
-
-            if [ -z "$APP_DIR" ]; then
-              echo "APP_DIR secret is required"
-              exit 1
-            fi
-
-            if [ ! -d "$APP_DIR/.git" ]; then
-              mkdir -p "$APP_DIR"
-              git clone --branch "$BRANCH" "$REPO_URL" "$APP_DIR"
-            fi
-
-            cd "$APP_DIR"
-            git fetch origin "$BRANCH"
-            git checkout "$BRANCH"
-            git reset --hard "origin/$BRANCH"
-
-            chmod +x deployment/runtime-scaffold-pack/deploy.sh
-            cd deployment/runtime-scaffold-pack
-            ./deploy.sh
-
-      - name: Post-deploy live endpoint checks
+      - name: Prepare SSH key
+        env:
+          DIGITALOCEAN_SSH_KEY: ${{ secrets.DIGITALOCEAN_SSH_KEY }}
         run: |
           set -eu
-          BASE_URL="${{ secrets.BASE_URL }}"
+
+          if [ -z "$DIGITALOCEAN_SSH_KEY" ]; then
+            echo "DIGITALOCEAN_SSH_KEY secret is required"
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          raw = os.environ["DIGITALOCEAN_SSH_KEY"].strip()
+          raw = raw.replace("\\n", "\n")
+
+          cleaned = []
+          for line in raw.splitlines():
+              value = line.strip()
+              if not value or value in {"COPY_START", "COPY_END"}:
+                  continue
+              if value.startswith("DIGITALOCEAN_SSH_KEY="):
+                  value = value.split("=", 1)[1].strip().strip('"').strip("'")
+              cleaned.append(value)
+
+          key = "\n".join(cleaned).strip() + "\n"
+          if "-----BEGIN OPENSSH PRIVATE KEY-----" not in key:
+              raise SystemExit("DIGITALOCEAN_SSH_KEY must contain the full OpenSSH private key block")
+          if "-----END OPENSSH PRIVATE KEY-----" not in key:
+              raise SystemExit("DIGITALOCEAN_SSH_KEY is missing the END OPENSSH PRIVATE KEY line")
+
+          Path(".deploy_ssh_key").write_text(key)
+          PY
+
+          chmod 600 .deploy_ssh_key
+          ssh-keygen -y -f .deploy_ssh_key > /dev/null
+
+      - name: Deploy to DigitalOcean droplet over SSH
+        env:
+          DIGITALOCEAN_HOST: ${{ secrets.DIGITALOCEAN_HOST }}
+          DIGITALOCEAN_USER: ${{ secrets.DIGITALOCEAN_USER }}
+          DIGITALOCEAN_PORT: ${{ secrets.DIGITALOCEAN_PORT }}
+          APP_DIR: ${{ secrets.APP_DIR }}
+        run: |
+          set -eu
+
+          for required in DIGITALOCEAN_HOST DIGITALOCEAN_USER DIGITALOCEAN_PORT APP_DIR; do
+            if [ -z "${!required}" ]; then
+              echo "$required secret is required"
+              exit 1
+            fi
+          done
+
+          ssh -i .deploy_ssh_key \
+            -o StrictHostKeyChecking=accept-new \
+            -o IdentitiesOnly=yes \
+            -p "$DIGITALOCEAN_PORT" \
+            "$DIGITALOCEAN_USER@$DIGITALOCEAN_HOST" \
+            APP_DIR="$APP_DIR" 'bash -s' <<'REMOTE'
+          set -eu
+
+          REPO_URL="https://github.com/rafsof22-lgtm/hub.git"
+          BRANCH="main"
+
+          if [ ! -d "$APP_DIR/.git" ]; then
+            mkdir -p "$APP_DIR"
+            git clone --branch "$BRANCH" "$REPO_URL" "$APP_DIR"
+          fi
+
+          cd "$APP_DIR"
+          git fetch origin "$BRANCH"
+          git checkout "$BRANCH"
+          git reset --hard "origin/$BRANCH"
+
+          chmod +x deployment/runtime-scaffold-pack/deploy.sh
+          cd deployment/runtime-scaffold-pack
+          ./deploy.sh
+          REMOTE
+
+      - name: Post-deploy live endpoint checks
+        env:
+          BASE_URL: ${{ secrets.BASE_URL }}
+        run: |
+          set -eu
 
           if [ -z "$BASE_URL" ]; then
             echo "BASE_URL secret is required"
