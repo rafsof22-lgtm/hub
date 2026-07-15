@@ -12,6 +12,14 @@ The public key was added to the DigitalOcean account:
 
 The private key must not be committed to this repo, pasted into chat, or stored in any non-secret file.
 
+## Existing Droplet
+
+- Droplet name: `Digital-ocean-XRP-Hbar-Apex`
+- Droplet id: `584697763`
+- Public IPv4: `134.199.144.115`
+- Region: `syd1`
+- Image: Ubuntu 24.04 LTS
+
 ## Important Existing-Droplet Rule
 
 Adding a public key to the DigitalOcean account does not automatically install that key on an existing droplet.
@@ -57,15 +65,22 @@ Set these Actions Variables or Secrets:
 DIGITALOCEAN_HOST=134.199.144.115
 DIGITALOCEAN_USER=root
 DIGITALOCEAN_PORT=22
+DIGITALOCEAN_DROPLET_ID=584697763
 APP_DIR=/opt/xrp-hbar-apex
 BASE_URL=https://<real-live-domain>
 ```
 
 `BASE_URL` must be the real domain that should pass public workflow checks. Do not leave `YOUR-DOMAIN.com`.
 
-## Optional DigitalOcean API Token Improvement
+## DigitalOcean API Token Improvement
 
-If future workflow diagnostics should call DigitalOcean APIs directly, create a DigitalOcean personal access token with the minimum scopes needed for read-only droplet diagnostics where possible.
+A diagnostics workflow now exists at:
+
+```text
+.github/workflows/digitalocean-diagnostics.yml
+```
+
+To enable it, create a DigitalOcean personal access token with the minimum scopes needed for read-only droplet diagnostics where possible.
 
 Store it only as a GitHub Actions Secret:
 
@@ -80,6 +95,7 @@ Recommended initial use:
 - read droplet metadata
 - read action status
 - read firewall or domain metadata if needed
+- probe SSH and public HTTP/HTTPS endpoints from GitHub Actions
 
 Avoid using the token for destructive actions from CI unless a separate approval gate is added.
 
