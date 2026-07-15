@@ -29,6 +29,7 @@ jobs:
           test -f deployment/runtime-scaffold-pack/Caddyfile
           test -f deployment/runtime-scaffold-pack/.env.production.example
           test -f deployment/runtime-scaffold-pack/services/xrp-hbar-apex/Dockerfile
+          test -f deployment/runtime-scaffold-pack/services/xrp-hbar-apex/requirements.txt
           test -f deployment/runtime-scaffold-pack/services/xrp-hbar-apex/app.py
 
       - name: Prepare SSH key
