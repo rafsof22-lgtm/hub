@@ -1,0 +1,4 @@
+.env.production
+*.pem
+*.key
+id_rsa*
