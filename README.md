@@ -19,5 +19,8 @@ Do not claim the runtime is live until:
 - The workflow runs from `main` and completes.
 - Droplet containers are healthy.
 - Public endpoint checks pass for `/health`, `/ready`, and `/deployment/status`.
+- A second harmless push proves auto-deploy updates the droplet without manual SSH deployment.
+
+Latest verification trigger commit: 2026-07-15T10:35Z.
 
 Tracked blocker: https://github.com/rafsof22-lgtm/hub/issues/1
