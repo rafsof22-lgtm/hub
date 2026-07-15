@@ -1,4 +1,4 @@
-{$DOMAIN} {
+:80 {
     encode gzip zstd
 
     handle /health {
