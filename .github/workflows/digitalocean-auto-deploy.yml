@@ -20,7 +20,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Validate required deploy files exist
         run: |
@@ -45,6 +45,7 @@ jobs:
 
           python3 - <<'PY'
           import os
+          import base64
           from pathlib import Path
 
           raw = os.environ["DIGITALOCEAN_SSH_KEY"].strip()
@@ -60,10 +61,18 @@ jobs:
               cleaned.append(value)
 
           key = "\n".join(cleaned).strip() + "\n"
-          if "-----BEGIN OPENSSH PRIVATE KEY-----" not in key:
-              raise SystemExit("DIGITALOCEAN_SSH_KEY must contain the full OpenSSH private key block")
-          if "-----END OPENSSH PRIVATE KEY-----" not in key:
-              raise SystemExit("DIGITALOCEAN_SSH_KEY is missing the END OPENSSH PRIVATE KEY line")
+          if "-----BEGIN " not in key and " PRIVATE KEY-----" not in key:
+              try:
+                  decoded = base64.b64decode("".join(key.split()), validate=True).decode()
+              except Exception:
+                  decoded = ""
+              if decoded:
+                  key = decoded.strip() + "\n"
+
+          if "-----BEGIN " not in key or " PRIVATE KEY-----" not in key:
+              raise SystemExit("DIGITALOCEAN_SSH_KEY must contain a full private key block, or a base64-encoded private key block")
+          if "-----END " not in key or " PRIVATE KEY-----" not in key:
+              raise SystemExit("DIGITALOCEAN_SSH_KEY is missing the END private key line")
 
           Path(".deploy_ssh_key").write_text(key)
           PY
