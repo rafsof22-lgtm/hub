@@ -1,0 +1,23 @@
+{$DOMAIN} {
+    encode gzip zstd
+
+    handle /health {
+        reverse_proxy api:8080
+    }
+
+    handle /ready {
+        reverse_proxy api:8080
+    }
+
+    handle /deployment/status {
+        reverse_proxy api:8080
+    }
+
+    handle_path /xrp-hbar-apex/* {
+        reverse_proxy api:8080
+    }
+
+    handle {
+        reverse_proxy api:8080
+    }
+}
