@@ -53,5 +53,23 @@ $COMPOSE_CMD --env-file .env.production -f docker-compose.prod.yml up -d --remov
 echo "[deploy] current status"
 $COMPOSE_CMD --env-file .env.production -f docker-compose.prod.yml ps
 
+echo "[deploy] waiting for local health endpoints"
+for path in health ready deployment/status; do
+  success=0
+  for attempt in $(seq 1 30); do
+    if curl --fail --silent --show-error "http://127.0.0.1/${path}" >/dev/null 2>&1; then
+      success=1
+      break
+    fi
+    sleep 2
+  done
+
+  if [ "$success" -ne 1 ]; then
+    echo "[deploy] local endpoint failed: /${path}"
+    $COMPOSE_CMD --env-file .env.production -f docker-compose.prod.yml logs --tail=120
+    exit 1
+  fi
+done
+
 echo "[deploy] complete"
 echo "Next: verify /health, /ready, and /deployment/status on your live domain."
