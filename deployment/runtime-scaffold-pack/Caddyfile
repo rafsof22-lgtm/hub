@@ -1,4 +1,4 @@
-:80 {
+(xrp_hbar_apex_proxy) {
     encode gzip zstd
 
     handle /health {
@@ -20,4 +20,12 @@
     handle {
         reverse_proxy api:8080
     }
+}
+
+:80 {
+    import xrp_hbar_apex_proxy
+}
+
+{$DOMAIN} {
+    import xrp_hbar_apex_proxy
 }
