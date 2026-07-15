@@ -11,7 +11,7 @@ APP_VERSION = os.getenv("APP_VERSION", "0.1.0")
 POSTGRES_HOST = os.getenv("POSTGRES_HOST", "postgres")
 POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5432"))
 POSTGRES_DB = os.getenv("POSTGRES_DB", "xrp_hbar_apex")
-POSTGRES_USER = os.getenv("POSTGRES_USER", "xrp_hbar_apex_user")
+POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "change_me")
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 
