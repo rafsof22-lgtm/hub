@@ -23,4 +23,6 @@ Do not claim the runtime is live until:
 
 Latest verification trigger commit: 2026-07-15T10:35Z.
 
+Secret/key setup runbook: `deployment/digitalocean-key-and-secret-runbook.md`
+
 Tracked blocker: https://github.com/rafsof22-lgtm/hub/issues/1
