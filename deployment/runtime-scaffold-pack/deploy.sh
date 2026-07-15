@@ -37,6 +37,13 @@ for service in caddy nginx apache2; do
   fi
 done
 
+echo "[deploy] removing legacy xrp_hbar_apex containers if present"
+for container in xrp_hbar_apex_caddy xrp_hbar_apex_app xrp_hbar_apex_postgres xrp_hbar_apex_redis; do
+  if docker ps -a --format '{{.Names}}' | grep -Fxq "$container"; then
+    docker rm -f "$container" >/dev/null 2>&1 || true
+  fi
+done
+
 echo "[deploy] pulling latest images"
 $COMPOSE_CMD --env-file .env.production -f docker-compose.prod.yml pull || true
 
