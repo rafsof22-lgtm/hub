@@ -31,20 +31,20 @@ Expected deploy path: `deployment/runtime-scaffold-pack`
 - A read-only Gmail search on 2026-07-16 found an owner-controlled DigitalOcean reset email for this exact droplet. No password, token, or reset value is recorded in repo/docs/chat.
 - Earlier push-triggered workflow runs proved workflow trigger behavior.
 - Latest rerun requested on 2026-07-16 was accepted by GitHub Actions.
-- Latest job attempt `87571675414` passed `Prepare SSH key`, deriving public key `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC0VjJjMeayv3ggrElS2vZIDlXUIXw6fER+op4UVs4DQ github-actions-deploy` with fingerprint `SHA256:EW6NvPhLbV8CxvvfGme6iSLTzyAii4AiSCQN2Cb+z6I (ED25519)`.
+- Latest job attempt `87572533963` passed `Prepare SSH key`, deriving public key `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC0VjJjMeayv3ggrElS2vZIDlXUIXw6fER+op4UVs4DQ github-actions-deploy` with fingerprint `SHA256:EW6NvPhLbV8CxvvfGme6iSLTzyAii4AiSCQN2Cb+z6I (ED25519)`.
 - Latest job attempt failed at `Deploy to DigitalOcean droplet over SSH` with `Permission denied (publickey)`.
 
 ## Latest Exercised Run
 
 - Run: `29469547563`
-- Latest job attempt: `87571675414`
+- Latest job attempt: `87572533963`
 - Checked-out commit in that rerun: `b46e969be6110e3326cf0b4236dd83cc3c93f445`
 - First failing step: `Deploy to DigitalOcean droplet over SSH`
 - Exact error: `Permission denied (publickey)`
 - `Prepare SSH key`: passed
 - `Post-deploy live endpoint checks`: skipped
 
-This latest rerun supersedes the temporary `Prepare SSH key` blocker from job `87568284263`. Current first blocker is again SSH auth on the existing droplet.
+Current first blocker is SSH auth on the existing droplet.
 
 ## Current Proof Gates
 
@@ -53,7 +53,7 @@ This latest rerun supersedes the temporary `Prepare SSH key` blocker from job `8
 | workflow file truth | proven | restored and re-fetched on `main` in commit `4a5ed6a83de467ae944137ac43d331cc495a8364` |
 | workflow trigger/rerun truth | proven | connected GitHub tool accepted rerun request for run `29469547563` |
 | scaffold file truth | proven in latest rerun | validation passed before SSH key preparation |
-| SSH key format truth | proven now | latest job `87571675414` passed `Prepare SSH key` |
+| SSH key format truth | proven now | latest job `87572533963` passed `Prepare SSH key` |
 | DigitalOcean account-key truth | proven | account key id `57820900` matches workflow-derived public key |
 | existing-droplet key authorization truth | blocked | account-level key presence does not prove `/root/.ssh/authorized_keys`; latest run failed with `Permission denied (publickey)` |
 | owner recovery route truth | partial | Gmail search found reset email for this droplet; credential value remains owner-only and unrecorded |
@@ -71,7 +71,7 @@ This latest rerun supersedes the temporary `Prepare SSH key` blocker from job `8
 - Restored `.github/workflows/digitalocean-auto-deploy.yml` on `main` in commit `4a5ed6a83de467ae944137ac43d331cc495a8364` after the current branch returned 404 for that path.
 - Workflow includes required file validation, SSH private-key cleanup/fingerprinting, remote synced-commit output, deploy script execution, and public endpoint checks.
 - `deployment/digitalocean-key-and-secret-runbook.md` records the owner-controlled reset-email recovery clue without storing the credential value.
-- This proof-status update records latest rerun job `87571675414` and current first failing gate.
+- This proof-status update records latest rerun job `87572533963` and current first failing gate.
 
 ## Current First Failing Proof Gate
 
