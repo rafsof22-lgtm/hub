@@ -152,15 +152,19 @@ jobs:
           check_endpoint() {
             url="$1"
             body_file="$(mktemp)"
+            headers_file="$(mktemp)"
             status="000"
-            if curl --location --max-time 20 --connect-timeout 10 --silent --show-error \
-              --output "$body_file" --write-out "%{http_code}" "$url" > "$body_file.status"; then
+            if curl --max-time 20 --connect-timeout 10 --silent --show-error \
+              --dump-header "$headers_file" --output "$body_file" --write-out "%{http_code}" "$url" > "$body_file.status"; then
               status="$(cat "$body_file.status")"
             else
               echo "curl_failed=true url=$url"
             fi
 
             echo "endpoint=$url status=$status"
+            if [ "$status" = "301" ] || [ "$status" = "302" ] || [ "$status" = "307" ] || [ "$status" = "308" ]; then
+              echo "redirect_location=$(awk 'tolower($1)==\"location:\" {print $2}' "$headers_file" | tr -d '\r' | tail -n 1)"
+            fi
             echo "body_preview_start"
             head -c 700 "$body_file" | tr '\n' ' '
             echo
