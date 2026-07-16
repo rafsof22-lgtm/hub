@@ -57,7 +57,7 @@ echo "[deploy] pulling latest images"
 $COMPOSE_CMD --env-file .env.production -f docker-compose.prod.yml pull || true
 
 echo "[deploy] starting services"
-$COMPOSE_CMD --env-file .env.production -f docker-compose.prod.yml up -d --remove-orphans --build
+$COMPOSE_CMD --env-file .env.production -f docker-compose.prod.yml up -d --remove-orphans --build --force-recreate
 
 echo "[deploy] current status"
 $COMPOSE_CMD --env-file .env.production -f docker-compose.prod.yml ps
@@ -79,6 +79,11 @@ for path in health ready deployment/status; do
     exit 1
   fi
 done
+
+echo "[deploy] active public listeners"
+if command -v ss >/dev/null 2>&1; then
+  ss -ltnp | grep -E ':(80|443)\b' || true
+fi
 
 echo "[deploy] complete"
 echo "Next: verify /health, /ready, and /deployment/status on your live domain."
