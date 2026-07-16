@@ -34,11 +34,12 @@ Expected deploy path: `deployment/runtime-scaffold-pack`
 - Run `29469334854` reached `Deploy to DigitalOcean droplet over SSH`, proving `Prepare SSH key` no longer fails on private-key format.
 - Run `29469474129` printed deploy key fingerprint `SHA256:EW6NvPhLbV8CxvvfGme6iSLTzyAii4AiSCQN2Cb+z6I (ED25519)` and failed with `Permission denied (publickey)`.
 - Run `29469547563` printed deploy public key `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC0VjJjMeayv3ggrElS2vZIDlXUIXw6fER+op4UVs4DQ github-actions-deploy` and failed with `Permission denied (publickey)`.
+- Rerun attempt for `29469547563`, job `87531200558`, after the reported secret update still printed the same deploy key fingerprint `SHA256:EW6NvPhLbV8CxvvfGme6iSLTzyAii4AiSCQN2Cb+z6I (ED25519)`, the same public key, and failed with `Permission denied (publickey)`.
 - DigitalOcean account-level SSH keys visible through the connected API do not match fingerprint `SHA256:EW6NvPhLbV8CxvvfGme6iSLTzyAii4AiSCQN2Cb+z6I`.
 
 ## Current User-Reported State
 
-The user reports local-machine SSH auth to the droplet was proven manually. This ledger treats that as separate from GitHub Actions SSH auth. GitHub Actions SSH auth is currently blocked by the public-key rejection shown in runs `29469474129` and `29469547563`.
+The user reports local-machine SSH auth to the droplet was proven manually and later reported that the GitHub secret was updated. GitHub Actions evidence after the reported update still shows the same old deploy fingerprint and the same SSH rejection. This ledger treats local-machine SSH and GitHub Actions SSH as separate gates.
 
 ## Current Proof Gates
 
@@ -46,8 +47,8 @@ The user reports local-machine SSH auth to the droplet was proven manually. This
 |---|---|---|
 | workflow file truth | proven | file exists and was inspected |
 | workflow trigger truth | proven | push-triggered runs appeared |
-| SSH key format truth | proven | `Prepare SSH key` passed in runs `29469334854`, `29469474129`, and `29469547563` |
-| SSH auth truth | blocked | `Permission denied (publickey)` in run `29469547563`; deploy key fingerprint is `SHA256:EW6NvPhLbV8CxvvfGme6iSLTzyAii4AiSCQN2Cb+z6I` |
+| SSH key format truth | proven | `Prepare SSH key` passed in runs `29469334854`, `29469474129`, `29469547563`, and rerun job `87531200558` |
+| SSH auth truth | blocked | rerun job `87531200558` still fails with `Permission denied (publickey)` using fingerprint `SHA256:EW6NvPhLbV8CxvvfGme6iSLTzyAii4AiSCQN2Cb+z6I` |
 | remote repo sync truth | not reached | SSH auth fails before remote commands execute |
 | host bootstrap truth | not reached | requires SSH deploy step to reach remote shell |
 | `.env.production` truth | not reached | host-only file, never committed |
@@ -73,11 +74,11 @@ The user reports local-machine SSH auth to the droplet was proven manually. This
 
 `SSH auth truth` is the current first failing proof gate.
 
-Current exact blocker: GitHub Actions can parse the `DIGITALOCEAN_SSH_KEY` private key and derive a public key, but the droplet rejects that key for the configured SSH user. The current Actions key fingerprint is `SHA256:EW6NvPhLbV8CxvvfGme6iSLTzyAii4AiSCQN2Cb+z6I` and public key is `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC0VjJjMeayv3ggrElS2vZIDlXUIXw6fER+op4UVs4DQ github-actions-deploy`.
+Current exact blocker: GitHub Actions can parse the `DIGITALOCEAN_SSH_KEY` private key and derive a public key, but the droplet rejects that key for the configured SSH user. After the reported secret update, Actions still derived fingerprint `SHA256:EW6NvPhLbV8CxvvfGme6iSLTzyAii4AiSCQN2Cb+z6I` and public key `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC0VjJjMeayv3ggrElS2vZIDlXUIXw6fER+op4UVs4DQ github-actions-deploy`.
 
 ## Exact Next Step
 
-Authorize the public key above for the configured droplet user, expected `root`, by adding it to `/root/.ssh/authorized_keys` on `134.199.144.115`, or replace GitHub Actions secret `DIGITALOCEAN_SSH_KEY` with the private key that matches a public key already authorized for that droplet user. Then rerun the latest failed workflow.
+Replace repository Actions secret `DIGITALOCEAN_SSH_KEY` in `rafsof22-lgtm/hub` with the full private key block that matches a public key authorized for the configured droplet user, expected `root`, or add the public key above to `/root/.ssh/authorized_keys` on `134.199.144.115`. Then rerun the failed workflow and verify the deploy step reaches remote commands.
 
 ## Strict Success Standard
 
