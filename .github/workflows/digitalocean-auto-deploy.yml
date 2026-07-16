@@ -29,8 +29,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Validate required deploy files exist
+      - name: Validate deploy files
         run: |
+          set -eu
           test -f deployment/runtime-scaffold-pack/deploy.sh
           test -f deployment/runtime-scaffold-pack/docker-compose.prod.yml
           test -f deployment/runtime-scaffold-pack/Caddyfile
@@ -93,128 +94,26 @@ jobs:
           PY
 
           chmod 600 .deploy_ssh_key
-          set +e
-          keygen_output="$(ssh-keygen -y -f .deploy_ssh_key 2>&1 > .deploy_ssh_key.pub)"
-          keygen_status=$?
-          set -e
-
-          if [ "$keygen_status" -ne 0 ]; then
-            echo "ssh-keygen failed while validating DIGITALOCEAN_SSH_KEY"
-            case "$keygen_output" in
-              *passphrase*|*incorrect\ passphrase*)
-                echo "DIGITALOCEAN_SSH_KEY appears to be passphrase-protected. Use a dedicated unencrypted deploy private key for GitHub Actions."
-                ;;
-              *invalid\ format*)
-                echo "DIGITALOCEAN_SSH_KEY has an invalid private-key format after cleanup. Re-save the full private key block with line breaks preserved."
-                ;;
-              *error\ in\ libcrypto*)
-                echo "DIGITALOCEAN_SSH_KEY is likely malformed or not an SSH private key."
-                ;;
-              *)
-                echo "$keygen_output"
-                ;;
-            esac
-            exit 1
-          fi
-
+          ssh-keygen -y -f .deploy_ssh_key > .deploy_ssh_key.pub
           echo "deploy_key_fingerprint=$(ssh-keygen -lf .deploy_ssh_key.pub | awk '{print $2, $4}')"
 
-      - name: Clear forced root password change
-        env:
-          DIGO1: ${{ secrets.DigO1 }}
-          DIGO2: ${{ secrets.DigO2 }}
-          DIGO3: ${{ secrets.DigO3 }}
-        run: bash deployment/runtime-scaffold-pack/clear-expired-root-password.sh
-
-      - name: Ensure droplet trusts deploy key
-        env:
-          DIGO1: ${{ secrets.DigO1 }}
-          DIGO2: ${{ secrets.DigO2 }}
-          DIGO3: ${{ secrets.DigO3 }}
+      - name: Verify droplet SSH access
         run: |
           set -eu
-
-          target="${DIGITALOCEAN_USER}@${DIGITALOCEAN_HOST}"
-          ssh_options="-i .deploy_ssh_key -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes -o BatchMode=yes -o PreferredAuthentications=publickey -o ConnectTimeout=15 -p ${DIGITALOCEAN_PORT}"
-
-          if ssh $ssh_options "$target" 'true'; then
-            echo "deploy_key_auth=already_trusted"
-            exit 0
-          fi
-
-          if [ ! -s .deploy_ssh_key.pub ]; then
-            echo ".deploy_ssh_key.pub was not created; cannot repair droplet authorized_keys"
-            exit 1
-          fi
-
-          if ! command -v sshpass >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y sshpass
-          fi
-
-          install_with_password() {
-            label="$1"
-            password="$2"
-            if [ -z "${password:-}" ]; then
-              echo "password_secret_empty=$label"
-              return 1
-            fi
-
-            deploy_pubkey="$(cat .deploy_ssh_key.pub)"
-            echo "trying_password_secret=$label"
-            set +e
-            SSHPASS="$password" sshpass -e ssh \
-              -o StrictHostKeyChecking=accept-new \
-              -o PreferredAuthentications=password \
-              -o PubkeyAuthentication=no \
-              -o ConnectTimeout=15 \
-              -p "$DIGITALOCEAN_PORT" \
-              "$target" \
-              "PUBKEY='$deploy_pubkey' bash -s" <<'REMOTE'
-          set -eu
-          mkdir -p /root/.ssh
-          chmod 700 /root/.ssh
-          touch /root/.ssh/authorized_keys
-          chmod 600 /root/.ssh/authorized_keys
-          if ! grep -qxF "$PUBKEY" /root/.ssh/authorized_keys; then
-            printf '%s\n' "$PUBKEY" >> /root/.ssh/authorized_keys
-          fi
-          REMOTE
-            status=$?
-            set -e
-
-            if [ "$status" -eq 0 ]; then
-              echo "password_secret_used=$label"
-              return 0
-            fi
-
-            echo "password_secret_failed=$label"
-            return 1
-          }
-
-          if install_with_password DigO1 "$DIGO1"; then
-            :
-          elif install_with_password DigO2 "$DIGO2"; then
-            :
-          elif install_with_password DigO3 "$DIGO3"; then
-            :
-          else
-            echo "No DigO password secret unlocked the droplet root account. The droplet still does not trust the deploy key."
-            exit 1
-          fi
-
-          if ssh $ssh_options "$target" 'true'; then
-            echo "deploy_key_auth=repaired_and_verified"
-          else
-            echo "Deploy key was written but key-based SSH verification still failed."
-            exit 1
-          fi
+          ssh -i .deploy_ssh_key \
+            -o StrictHostKeyChecking=accept-new \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o PreferredAuthentications=publickey \
+            -o ConnectTimeout=15 \
+            -p "$DIGITALOCEAN_PORT" \
+            "$DIGITALOCEAN_USER@$DIGITALOCEAN_HOST" 'true'
 
       - name: Deploy to DigitalOcean droplet over SSH
         run: |
           set -eu
 
-          for required in DIGITALOCEAN_HOST DIGITALOCEAN_USER DIGITALOCEAN_PORT APP_DIR; do
+          for required in DIGITALOCEAN_HOST DIGITALOCEAN_USER DIGITALOCEAN_PORT APP_DIR BASE_URL; do
             if [ -z "${!required}" ]; then
               echo "$required must be set in workflow env"
               exit 1
@@ -230,7 +129,10 @@ jobs:
             -o PreferredAuthentications=publickey \
             -p "$DIGITALOCEAN_PORT" \
             "$DIGITALOCEAN_USER@$DIGITALOCEAN_HOST" \
-            APP_DIR="$APP_DIR" 'bash -s' <<'REMOTE'
+            APP_DIR="$APP_DIR" \
+            BASE_URL="$BASE_URL" \
+            DIGITALOCEAN_HOST="$DIGITALOCEAN_HOST" \
+            'bash -s' <<'REMOTE'
           set -eu
 
           REPO_URL="https://github.com/rafsof22-lgtm/hub.git"
@@ -247,28 +149,61 @@ jobs:
           git reset --hard "origin/$BRANCH"
           echo "[remote] synced_commit=$(git rev-parse HEAD)"
 
-          chmod +x deployment/runtime-scaffold-pack/deploy.sh
           cd deployment/runtime-scaffold-pack
+          if [ ! -f .env.production ]; then
+            cp .env.production.example .env.production
+          fi
+
+          set_kv() {
+            key="$1"
+            value="$2"
+            tmp="$(mktemp)"
+            if grep -q "^${key}=" .env.production; then
+              sed "s|^${key}=.*|${key}=${value}|" .env.production > "$tmp"
+              mv "$tmp" .env.production
+            else
+              rm -f "$tmp"
+              printf '%s=%s\n' "$key" "$value" >> .env.production
+            fi
+          }
+
+          get_kv() {
+            grep -E "^$1=" .env.production | tail -n 1 | cut -d= -f2- || true
+          }
+
+          make_secret() {
+            if command -v openssl >/dev/null 2>&1; then
+              openssl rand -hex 32
+            else
+              python3 -c 'import secrets; print(secrets.token_hex(32))'
+            fi
+          }
+
+          needs_value() {
+            value="$1"
+            [ -z "$value" ] || printf '%s' "$value" | grep -Eqi 'YOUR-|change-me|change_me|example\.com'
+          }
+
+          set_kv DOMAIN "$DIGITALOCEAN_HOST"
+          set_kv BASE_URL "$BASE_URL"
+          set_kv XRP_HBAR_APEX_BASE_URL "$BASE_URL"
+          if needs_value "$(get_kv JOB_SIGNING_SECRET)"; then
+            set_kv JOB_SIGNING_SECRET "$(make_secret)"
+          fi
+          if needs_value "$(get_kv POSTGRES_PASSWORD)"; then
+            set_kv POSTGRES_PASSWORD "$(make_secret)"
+          fi
+          postgres_password="$(get_kv POSTGRES_PASSWORD)"
+          set_kv POSTGRES_URL "postgres://postgres:${postgres_password}@db:5432/xrp_hbar_apex"
+
+          chmod +x deploy.sh
           ./deploy.sh
           REMOTE
 
       - name: Post-deploy live endpoint checks
         run: |
           set -eu
-
-          if [ -z "$BASE_URL" ]; then
-            echo "BASE_URL must be set in workflow env"
-            exit 1
-          fi
-
           BASE_URL="${BASE_URL%/}"
-          case "$BASE_URL" in
-            http://*|https://*) ;;
-            *)
-              echo "BASE_URL must include http:// or https://"
-              exit 1
-              ;;
-          esac
 
           check_endpoint() {
             url="$1"
