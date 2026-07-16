@@ -19,11 +19,11 @@ jobs:
     timeout-minutes: 20
 
     env:
-      DIGITALOCEAN_HOST: 209.38.21.147
+      DIGITALOCEAN_HOST: 170.64.230.87
       DIGITALOCEAN_USER: root
       DIGITALOCEAN_PORT: "22"
       APP_DIR: /opt/xrp-hbar-apex
-      BASE_URL: http://209.38.21.147
+      BASE_URL: http://170.64.230.87
 
     steps:
       - name: Checkout repository
