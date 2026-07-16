@@ -134,7 +134,6 @@ def health():
         "version": APP_VERSION
     }), 200
 
-
 @app.route("/ready")
 def ready():
     db_ok = False
@@ -170,7 +169,6 @@ def ready():
         "postgres": "ok" if db_ok else db_error,
         "redis": "ok" if redis_ok else redis_error
     }), 503
-
 
 @app.route("/deployment/status")
 def deployment_status():
@@ -501,7 +499,9 @@ def email_newsletter_status():
             "manual_newsletter_source_record_intake",
             "manual_newsletter_summary_hashing",
             "postgres_newsletter_proof_persistence",
-            "latest_newsletter_proof_retrieval"
+            "proof_id_newsletter_retrieval",
+            "latest_newsletter_proof_retrieval",
+            "newsletter_proof_list_retrieval"
         ],
         "proof_object_schema": EMAIL_NEWSLETTER_PROOF_OBJECT_SCHEMA,
         "proof_label": "EMAIL_NEWSLETTER_MANUAL_PROOF_ROUTE_AVAILABLE",
@@ -660,6 +660,93 @@ def email_newsletter_latest_proof():
         **_format_email_newsletter_proof_row(row)
     }), 200
 
+
+@app.route("/email/newsletter/proof/<proof_id>")
+def email_newsletter_proof(proof_id):
+    clean_proof_id = proof_id.strip()
+    if not clean_proof_id:
+        return jsonify({
+            "status": "invalid",
+            "error": "proof_id is required"
+        }), 400
+
+    try:
+        with _db_connect() as conn:
+            _ensure_email_newsletter_proof_table(conn)
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT proof_id, source_name, source_url, subject, received_at,
+                           proof_label, evidence, limits, created_at, updated_at
+                    FROM email_newsletter_proof
+                    WHERE proof_id = %s;
+                    """,
+                    (clean_proof_id,)
+                )
+                row = cur.fetchone()
+    except Exception as e:
+        return jsonify({
+            "status": "retrieval_failed",
+            "error": str(e)
+        }), 503
+
+    if not row:
+        return jsonify({
+            "status": "not_found",
+            "proof_id": clean_proof_id
+        }), 404
+
+    return jsonify({
+        "status": "found",
+        "service": APP_NAME,
+        "mode": "email_newsletter_proof_id_retrieval",
+        **_format_email_newsletter_proof_row(row)
+    }), 200
+
+
+@app.route("/email/newsletter/proof")
+def email_newsletter_proof_list():
+    try:
+        limit = int(request.args.get("limit", "10"))
+    except ValueError:
+        return jsonify({
+            "status": "invalid",
+            "error": "limit must be an integer"
+        }), 400
+
+    limit = max(1, min(limit, 50))
+
+    try:
+        with _db_connect() as conn:
+            _ensure_email_newsletter_proof_table(conn)
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT proof_id, source_name, source_url, subject, received_at,
+                           proof_label, evidence, limits, created_at, updated_at
+                    FROM email_newsletter_proof
+                    ORDER BY updated_at DESC, created_at DESC
+                    LIMIT %s;
+                    """,
+                    (limit,)
+                )
+                rows = cur.fetchall()
+    except Exception as e:
+        return jsonify({
+            "status": "list_retrieval_failed",
+            "error": str(e)
+        }), 503
+
+    return jsonify({
+        "status": "ok",
+        "service": APP_NAME,
+        "mode": "email_newsletter_proof_list_retrieval",
+        "proof_label": "EMAIL_NEWSLETTER_PERSISTED_PROOF_LIST_RETRIEVAL_PROVEN",
+        "proof_object_schema": EMAIL_NEWSLETTER_PROOF_OBJECT_SCHEMA,
+        "count": len(rows),
+        "limit": limit,
+        "items": [_format_email_newsletter_proof_row(row) for row in rows]
+    }), 200
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
