@@ -19,11 +19,13 @@ jobs:
     timeout-minutes: 25
 
     env:
-      DIGITALOCEAN_HOST: ${{ vars.DIGITALOCEAN_HOST || secrets.DIGITALOCEAN_HOST || '134.199.144.115' }}
-      DIGITALOCEAN_USER: ${{ vars.DIGITALOCEAN_USER || secrets.DIGITALOCEAN_USER || 'root' }}
-      DIGITALOCEAN_PORT: ${{ vars.DIGITALOCEAN_PORT || secrets.DIGITALOCEAN_PORT || '22' }}
-      APP_DIR: ${{ vars.APP_DIR || secrets.APP_DIR || '/opt/xrp-hbar-apex' }}
-      BASE_URL: ${{ vars.BASE_URL || secrets.BASE_URL || 'http://134.199.144.115' }}
+      # Pin non-secret proof target values in repo code so stale/masked Actions
+      # variables cannot silently point deployment at the wrong user/host/port.
+      DIGITALOCEAN_HOST: '134.199.144.115'
+      DIGITALOCEAN_USER: 'root'
+      DIGITALOCEAN_PORT: '22'
+      APP_DIR: '/opt/xrp-hbar-apex'
+      BASE_URL: 'http://134.199.144.115'
 
     steps:
       - name: Checkout repository
@@ -105,12 +107,13 @@ jobs:
 
           for required in DIGITALOCEAN_HOST DIGITALOCEAN_USER DIGITALOCEAN_PORT APP_DIR; do
             if [ -z "${!required}" ]; then
-              echo "$required must be saved as an Actions Variable or Secret"
+              echo "$required must be set in workflow env"
               exit 1
             fi
           done
 
           echo "deploy_target=${DIGITALOCEAN_USER}@${DIGITALOCEAN_HOST}:${DIGITALOCEAN_PORT} app_dir=${APP_DIR}"
+          echo "ssh_probe=starting"
 
           ssh -i .deploy_ssh_key \
             -o StrictHostKeyChecking=accept-new \
@@ -121,6 +124,10 @@ jobs:
             "$DIGITALOCEAN_USER@$DIGITALOCEAN_HOST" \
             APP_DIR="$APP_DIR" 'bash -s' <<'REMOTE'
           set -eu
+
+          echo "[remote] connected_user=$(whoami)"
+          echo "[remote] host=$(hostname)"
+          echo "[remote] pwd=$(pwd)"
 
           REPO_URL="https://github.com/rafsof22-lgtm/hub.git"
           BRANCH="main"
@@ -146,7 +153,7 @@ jobs:
           set -eu
 
           if [ -z "${BASE_URL:-}" ]; then
-            echo "BASE_URL must be saved as an Actions Variable or Secret"
+            echo "BASE_URL must be set in workflow env"
             exit 1
           fi
 
