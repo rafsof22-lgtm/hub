@@ -39,12 +39,37 @@ else
 fi
 
 echo "[deploy] freeing host ports 80 and 443 for Docker Caddy"
-for service in caddy nginx apache2; do
+for service in caddy nginx apache2 envoy; do
   if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files "${service}.service" >/dev/null 2>&1; then
     systemctl stop "$service" 2>/dev/null || true
     systemctl disable "$service" 2>/dev/null || true
   fi
 done
+
+$COMPOSE_CMD --env-file .env.production -f docker-compose.prod.yml down --remove-orphans >/dev/null 2>&1 || true
+
+for port in 80 443; do
+  if command -v fuser >/dev/null 2>&1; then
+    fuser -k "${port}/tcp" >/dev/null 2>&1 || true
+  elif command -v lsof >/dev/null 2>&1; then
+    lsof -ti tcp:"${port}" | xargs -r kill -TERM 2>/dev/null || true
+  elif command -v ss >/dev/null 2>&1; then
+    pids="$(ss -ltnp 2>/dev/null | awk -v port=":${port}" '$4 ~ port {print $0}' | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | sort -u)"
+    if [ -n "$pids" ]; then
+      echo "$pids" | xargs -r kill -TERM 2>/dev/null || true
+    fi
+  fi
+done
+
+sleep 2
+if command -v ss >/dev/null 2>&1; then
+  occupied="$(ss -ltnp 2>/dev/null | grep -E ':(80|443)\b' || true)"
+  if [ -n "$occupied" ]; then
+    echo "[deploy] ports still occupied after graceful stop; forcing cleanup"
+    echo "$occupied"
+    echo "$occupied" | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | sort -u | xargs -r kill -KILL 2>/dev/null || true
+  fi
+fi
 
 echo "[deploy] removing legacy xrp_hbar_apex containers if present"
 for container in xrp_hbar_apex_caddy xrp_hbar_apex_app xrp_hbar_apex_postgres xrp_hbar_apex_redis; do
