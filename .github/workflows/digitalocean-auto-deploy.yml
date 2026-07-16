@@ -119,6 +119,13 @@ jobs:
 
           echo "deploy_key_fingerprint=$(ssh-keygen -lf .deploy_ssh_key.pub | awk '{print $2, $4}')"
 
+      - name: Clear forced root password change
+        env:
+          DIGO1: ${{ secrets.DigO1 }}
+          DIGO2: ${{ secrets.DigO2 }}
+          DIGO3: ${{ secrets.DigO3 }}
+        run: bash deployment/runtime-scaffold-pack/clear-expired-root-password.sh
+
       - name: Ensure droplet trusts deploy key
         env:
           DIGO1: ${{ secrets.DigO1 }}
