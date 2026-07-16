@@ -230,13 +230,25 @@ jobs:
           done
 
           vti_payload='{"source_url":"https://ripple.com/solutions/stablecoin/","platform":"official-web-copied-link","title":"Ripple USD stablecoin copied-link smoke proof","transcript":"Manual transcript smoke: Ripple USD is described as a regulated dollar-backed stablecoin relevant to XRP settlement infrastructure.","ocr_text":"Visible-page OCR smoke: Ripple USD stablecoin, reserves, compliance, payments."}'
+          vti_source_id="$(python3 - <<'PY'
+          import hashlib
+          source_url = "https://ripple.com/solutions/stablecoin/"
+          transcript = "Manual transcript smoke: Ripple USD is described as a regulated dollar-backed stablecoin relevant to XRP settlement infrastructure."
+          ocr_text = "Visible-page OCR smoke: Ripple USD stablecoin, reserves, compliance, payments."
+          print(hashlib.sha256("|".join([source_url, transcript[:2000], ocr_text[:2000]]).encode("utf-8")).hexdigest()[:24])
+          PY
+          )"
+
           if ! check_post_json "$BASE_URL/vti/smoke" "$vti_payload"; then
+            failed=1
+          fi
+          if ! check_endpoint "$BASE_URL/vti/evidence/$vti_source_id"; then
             failed=1
           fi
 
           if [ "$failed" -ne 0 ]; then
             echo "BASE_URL endpoint checks failed. Probing direct droplet HTTP for routing diagnostics."
-            for path in health ready deployment/status vti/status; do
+            for path in health ready deployment/status vti/status "vti/evidence/$vti_source_id"; do
               curl -i --max-time 15 "http://${DIGITALOCEAN_HOST}/${path}" || true
             done
             curl -i --max-time 15 \
