@@ -27,6 +27,8 @@ Expected deploy path: `deployment/runtime-scaffold-pack`
 - The Flask app exposes `/health`, `/ready`, and `/deployment/status`.
 - The deploy script validates `.env.production`, rejects placeholders, starts Docker Compose, and checks local health endpoints.
 - DigitalOcean API confirmed droplet `584697763` is active in `syd1` with public IPv4 `134.199.144.115`.
+- DigitalOcean account key list contains the workflow-derived public key as key id `57820900`, name `github-actions-deploy-2026-07-16-active`, fingerprint `cd:d7:63:29:26:e0:75:f0:6d:49:b0:74:88:f3:2b:73`.
+- A read-only Gmail search on 2026-07-16 found an owner-controlled DigitalOcean reset email for this exact droplet. No password, token, or reset value is recorded in repo/docs/chat.
 - Earlier push-triggered workflow runs proved workflow trigger behavior.
 - Earlier run `29463550411` proved the prior first failing step was `Prepare SSH key` with invalid private-key format.
 - Later runs proved `Prepare SSH key` passes and derives public key `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC0VjJjMeayv3ggrElS2vZIDlXUIXw6fER+op4UVs4DQ github-actions-deploy`.
@@ -42,6 +44,9 @@ Expected deploy path: `deployment/runtime-scaffold-pack`
 | workflow trigger truth | proven historically | prior push-triggered runs appeared; connected run list is limited and did not expose a new run for the restore commit |
 | scaffold file truth | proven in latest exercised run | validation passed in run `29469547563`, job `87562750570` |
 | SSH key format truth | proven | `Prepare SSH key` passed in latest exercised run |
+| DigitalOcean account-key truth | proven | account key id `57820900` matches workflow-derived public key |
+| existing-droplet key authorization truth | blocked | account-level key presence does not prove `/root/.ssh/authorized_keys`; latest run failed with `Permission denied (publickey)` |
+| owner recovery route truth | partial | Gmail search found reset email for this droplet; credential value remains owner-only and unrecorded |
 | SSH auth truth | blocked | latest exercised run failed before remote shell with `Permission denied (publickey)` |
 | remote repo sync truth | not reached | requires workflow reaching remote shell and printing `[remote] synced_commit=...` |
 | host bootstrap truth | not reached | requires remote Docker/compose execution evidence |
@@ -55,17 +60,24 @@ Expected deploy path: `deployment/runtime-scaffold-pack`
 
 - Restored `.github/workflows/digitalocean-auto-deploy.yml` on `main` in commit `4a5ed6a83de467ae944137ac43d331cc495a8364` after the current branch returned 404 for that path.
 - Workflow includes required file validation, SSH private-key cleanup/fingerprinting, remote synced-commit output, deploy script execution, and public endpoint checks.
-- Deployment docs and issue #1 should treat SSH auth as the current exercised blocker until a newer run proves remote shell access.
+- Deployment docs and issue #1 treat SSH auth as the current exercised blocker until a newer run proves remote shell access.
+- `deployment/digitalocean-key-and-secret-runbook.md` records the owner-controlled reset-email recovery clue without storing the credential value.
 
 ## Current First Failing Proof Gate
 
 `SSH auth truth` is the current first failing proof gate from the newest exercised run available to this agent.
 
-Exact blocker: the workflow parses the private key and derives the public key, but SSH to the configured droplet user fails with `Permission denied (publickey)` before remote commands execute.
+Exact blocker: the workflow parses the private key and derives the public key, and the same public key exists in the DigitalOcean account, but SSH to the configured droplet user fails with `Permission denied (publickey)` before remote commands execute. The likely unresolved layer is existing-droplet `/root/.ssh/authorized_keys` authorization for the `root` user, or a mismatched GitHub secret versus authorized droplet key.
 
 ## Exact Next Step
 
-Use GitHub Actions or a supported run-inspection path to exercise restored workflow commit `4a5ed6a83de467ae944137ac43d331cc495a8364`. If it still derives public key `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC0VjJjMeayv3ggrElS2vZIDlXUIXw6fER+op4UVs4DQ github-actions-deploy` and fails with `Permission denied (publickey)`, authorize that public key for the configured droplet user or replace `DIGITALOCEAN_SSH_KEY` with the private key for an already-authorized droplet key.
+Use the owner-controlled DigitalOcean reset email or an already-working SSH/console session to access droplet `134.199.144.115`, then append this public key to `/root/.ssh/authorized_keys` for `root`:
+
+```text
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC0VjJjMeayv3ggrElS2vZIDlXUIXw6fER+op4UVs4DQ github-actions-deploy
+```
+
+Then rerun `DigitalOcean Auto Deploy` for restored workflow commit `4a5ed6a83de467ae944137ac43d331cc495a8364` or a newer harmless proof commit.
 
 ## Strict Success Standard
 
