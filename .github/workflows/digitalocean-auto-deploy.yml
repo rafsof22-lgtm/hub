@@ -119,6 +119,90 @@ jobs:
 
           echo "deploy_key_fingerprint=$(ssh-keygen -lf .deploy_ssh_key.pub | awk '{print $2, $4}')"
 
+      - name: Ensure droplet trusts deploy key
+        env:
+          DIGO1: ${{ secrets.DigO1 }}
+          DIGO2: ${{ secrets.DigO2 }}
+          DIGO3: ${{ secrets.DigO3 }}
+        run: |
+          set -eu
+
+          target="${DIGITALOCEAN_USER}@${DIGITALOCEAN_HOST}"
+          ssh_options="-i .deploy_ssh_key -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes -o BatchMode=yes -o PreferredAuthentications=publickey -o ConnectTimeout=15 -p ${DIGITALOCEAN_PORT}"
+
+          if ssh $ssh_options "$target" 'true'; then
+            echo "deploy_key_auth=already_trusted"
+            exit 0
+          fi
+
+          if [ ! -s .deploy_ssh_key.pub ]; then
+            echo ".deploy_ssh_key.pub was not created; cannot repair droplet authorized_keys"
+            exit 1
+          fi
+
+          if ! command -v sshpass >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y sshpass
+          fi
+
+          install_with_password() {
+            label="$1"
+            password="$2"
+            if [ -z "${password:-}" ]; then
+              echo "password_secret_empty=$label"
+              return 1
+            fi
+
+            deploy_pubkey="$(cat .deploy_ssh_key.pub)"
+            echo "trying_password_secret=$label"
+            set +e
+            SSHPASS="$password" sshpass -e ssh \
+              -o StrictHostKeyChecking=accept-new \
+              -o PreferredAuthentications=password \
+              -o PubkeyAuthentication=no \
+              -o ConnectTimeout=15 \
+              -p "$DIGITALOCEAN_PORT" \
+              "$target" \
+              "PUBKEY='$deploy_pubkey' bash -s" <<'REMOTE'
+          set -eu
+          mkdir -p /root/.ssh
+          chmod 700 /root/.ssh
+          touch /root/.ssh/authorized_keys
+          chmod 600 /root/.ssh/authorized_keys
+          if ! grep -qxF "$PUBKEY" /root/.ssh/authorized_keys; then
+            printf '%s\n' "$PUBKEY" >> /root/.ssh/authorized_keys
+          fi
+          REMOTE
+            status=$?
+            set -e
+
+            if [ "$status" -eq 0 ]; then
+              echo "password_secret_used=$label"
+              return 0
+            fi
+
+            echo "password_secret_failed=$label"
+            return 1
+          }
+
+          if install_with_password DigO1 "$DIGO1"; then
+            :
+          elif install_with_password DigO2 "$DIGO2"; then
+            :
+          elif install_with_password DigO3 "$DIGO3"; then
+            :
+          else
+            echo "No DigO password secret unlocked the droplet root account. The droplet still does not trust the deploy key."
+            exit 1
+          fi
+
+          if ssh $ssh_options "$target" 'true'; then
+            echo "deploy_key_auth=repaired_and_verified"
+          else
+            echo "Deploy key was written but key-based SSH verification still failed."
+            exit 1
+          fi
+
       - name: Deploy to DigitalOcean droplet over SSH
         run: |
           set -eu
