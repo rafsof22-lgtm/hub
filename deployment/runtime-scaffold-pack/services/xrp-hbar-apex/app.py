@@ -21,6 +21,32 @@ POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "change_me")
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 
+VTI_SMOKE_EVIDENCE_PROOF_OBJECT_SCHEMA = {
+    "source_record": {
+        "source_id": "deterministic sha256 prefix of source_url, transcript, and ocr_text",
+        "source_url": "copied link URL",
+        "domain": "parsed URL domain",
+        "platform": "submitted platform or parsed domain",
+        "title": "submitted title or null"
+    },
+    "evidence": {
+        "copied_link_captured": "boolean",
+        "manual_transcript_captured": "boolean",
+        "ocr_text_captured": "boolean",
+        "transcript_word_count": "integer",
+        "ocr_word_count": "integer",
+        "transcript_sha256": "sha256 hash or null",
+        "ocr_text_sha256": "sha256 hash or null",
+        "persisted_at_utc": "ISO-8601 timestamp"
+    },
+    "limits": {
+        "automatic_media_fetch": "boolean",
+        "automatic_caption_fetch": "boolean",
+        "automatic_ocr_worker": "boolean",
+        "claim_verification_worker": "boolean"
+    }
+}
+
 
 def _db_connect():
     return psycopg.connect(
@@ -135,8 +161,10 @@ def vti_status():
             "source_record_hashing",
             "postgres_smoke_evidence_persistence",
             "source_id_evidence_retrieval",
-            "latest_evidence_retrieval"
+            "latest_evidence_retrieval",
+            "evidence_list_retrieval"
         ],
+        "proof_object_schema": VTI_SMOKE_EVIDENCE_PROOF_OBJECT_SCHEMA,
         "proof_label": "VTI_SMOKE_AND_RETRIEVAL_ROUTES_AVAILABLE",
         "limits": [
             "no_external_media_download_yet",
@@ -356,6 +384,51 @@ def vti_latest_evidence():
         "service": APP_NAME,
         "mode": "vti_latest_evidence_retrieval",
         **_format_vti_evidence_row(row)
+    }), 200
+
+
+@app.route("/vti/evidence")
+def vti_evidence_list():
+    try:
+        limit = int(request.args.get("limit", "10"))
+    except ValueError:
+        return jsonify({
+            "status": "invalid",
+            "error": "limit must be an integer"
+        }), 400
+
+    limit = max(1, min(limit, 50))
+
+    try:
+        with _db_connect() as conn:
+            _ensure_vti_evidence_table(conn)
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT source_id, source_url, domain, platform, title,
+                           proof_label, evidence, limits, created_at, updated_at
+                    FROM vti_smoke_evidence
+                    ORDER BY updated_at DESC, created_at DESC
+                    LIMIT %s;
+                    """,
+                    (limit,)
+                )
+                rows = cur.fetchall()
+    except Exception as e:
+        return jsonify({
+            "status": "list_retrieval_failed",
+            "error": str(e)
+        }), 503
+
+    return jsonify({
+        "status": "ok",
+        "service": APP_NAME,
+        "mode": "vti_evidence_list_retrieval",
+        "proof_label": "VTI_PERSISTED_EVIDENCE_LIST_RETRIEVAL_PROVEN",
+        "proof_object_schema": VTI_SMOKE_EVIDENCE_PROOF_OBJECT_SCHEMA,
+        "count": len(rows),
+        "limit": limit,
+        "items": [_format_vti_evidence_row(row) for row in rows]
     }), 200
 
 
