@@ -1,6 +1,6 @@
 # Runtime Proof Status - 2026-07-16
 
-Proof labels: `STANDING_AUTONOMY_APPROVED`, `DEPLOYMENT_DRIFT_CHECKED`, `GITHUB_ACTIONS_TRIGGER_VERIFIED`, `REPO_DOCS_ALIGNED`, `WORKFLOW_RESTORED`, `SSH_KEY_FORMAT_PROVEN`, `SSH_AUTH_BLOCKED`, `END_TO_END_NOT_VERIFIED`.
+Proof labels: `STANDING_AUTONOMY_APPROVED`, `DEPLOYMENT_DRIFT_CHECKED`, `GITHUB_ACTIONS_TRIGGER_VERIFIED`, `REPO_DOCS_ALIGNED`, `WORKFLOW_TARGET_VALUES_PINNED`, `SSH_KEY_FORMAT_PROVEN`, `SSH_AUTH_BLOCKED`, `END_TO_END_NOT_VERIFIED`.
 
 ## Scope
 
@@ -22,44 +22,46 @@ Expected deploy path: `deployment/runtime-scaffold-pack`
 
 - GitHub repo exists and default branch is `main`.
 - Connected GitHub app reports repo access and can update repo files/issues.
-- `DigitalOcean Auto Deploy` was restored on `main` in commit `4a5ed6a83de467ae944137ac43d331cc495a8364` and re-fetched successfully.
-- The deployment scaffold files exist in the repo.
+- Deployment scaffold files exist in the repo.
 - The Flask app exposes `/health`, `/ready`, and `/deployment/status`.
 - The deploy script validates `.env.production`, rejects placeholders, starts Docker Compose, and checks local health endpoints.
 - DigitalOcean API confirmed droplet `584697763` is active in `syd1` with public IPv4 `134.199.144.115`.
 - DigitalOcean account key list contains public key id `57820900`, name `github-actions-deploy-2026-07-16-active`, fingerprint `cd:d7:63:29:26:e0:75:f0:6d:49:b0:74:88:f3:2b:73`.
-- A read-only Gmail search on 2026-07-16 found an owner-controlled DigitalOcean reset email for this exact droplet. No password, token, or reset value is recorded in repo/docs/chat.
-- No usable local private SSH key was found in this workspace for directly logging in to the droplet.
-- The exposed DigitalOcean connector can inspect droplet/account keys and perform account/droplet actions, but it does not expose a droplet shell or command runner for editing `/root/.ssh/authorized_keys`.
-- Latest rerun requested on 2026-07-16 was accepted by GitHub Actions.
-- Latest job attempt `87574584632` passed `Prepare SSH key`, deriving public key `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC0VjJjMeayv3ggrElS2vZIDlXUIXw6fER+op4UVs4DQ github-actions-deploy` with fingerprint `SHA256:EW6NvPhLbV8CxvvfGme6iSLTzyAii4AiSCQN2Cb+z6I (ED25519)`.
-- Latest job attempt failed at `Deploy to DigitalOcean droplet over SSH` with `Permission denied (publickey)`.
+- User-provided droplet console output proves the deploy public key is present in `/root/.ssh/authorized_keys`, permissions are `700` for `/root/.ssh` and `600` for `authorized_keys`, `PermitRootLogin yes`, `PubkeyAuthentication yes`, and `AuthorizedKeysFile .ssh/authorized_keys .ssh/authorized_keys2`.
+- Historical reruns of run `29469547563` still checked out old commit `b46e969be6110e3326cf0b4236dd83cc3c93f445` and failed at SSH auth.
+- Workflow target values were pinned in `.github/workflows/digitalocean-auto-deploy.yml` in commit `c21c112aa83adcea3e21fcc7bd1040cbcd2aee04`:
+  - `DIGITALOCEAN_HOST=134.199.144.115`
+  - `DIGITALOCEAN_USER=root`
+  - `DIGITALOCEAN_PORT=22`
+  - `APP_DIR=/opt/xrp-hbar-apex`
+  - `BASE_URL=http://134.199.144.115`
+- The pinned workflow also prints `[remote] connected_user`, `[remote] host`, and `[remote] synced_commit` after successful SSH so the next proof gate is unambiguous.
+- Connector limitation: commit-associated workflow-run lookup returned no visible run for commit `c21c112aa83adcea3e21fcc7bd1040cbcd2aee04`; the available connector did not expose a general fresh `workflow_dispatch` action.
 
-## Latest Exercised Run
+## Latest Exercised Run Before Target Pinning
 
 - Run: `29469547563`
-- Latest job attempt: `87574584632`
+- Latest old-run job attempt: `87574584632`
 - Checked-out commit in that rerun: `b46e969be6110e3326cf0b4236dd83cc3c93f445`
 - First failing step: `Deploy to DigitalOcean droplet over SSH`
 - Exact error: `Permission denied (publickey)`
 - `Prepare SSH key`: passed
 - `Post-deploy live endpoint checks`: skipped
 
-Current first blocker remains SSH auth on the existing droplet.
+This old-run rerun is no longer the right proof vehicle because it checks out an old commit and old workflow state. The next proof must run the current `main` workflow at or after commit `c21c112aa83adcea3e21fcc7bd1040cbcd2aee04`.
 
 ## Current Proof Gates
 
 | gate | status | notes |
 |---|---|---|
-| workflow file truth | proven | restored and re-fetched on `main` in commit `4a5ed6a83de467ae944137ac43d331cc495a8364` |
-| workflow trigger/rerun truth | proven | connected GitHub tool accepted rerun request for run `29469547563` |
-| scaffold file truth | proven in latest rerun | validation passed before SSH key preparation |
-| SSH key format truth | proven now | latest job `87574584632` passed `Prepare SSH key` |
+| workflow file truth | proven | current workflow pins target values in commit `c21c112aa83adcea3e21fcc7bd1040cbcd2aee04` |
+| workflow trigger/rerun truth | partial | historical reruns work, but connector cannot prove a fresh run for the new commit |
+| scaffold file truth | proven historically | validation passed in old-run reruns |
+| SSH key format truth | proven historically | old-run reruns passed `Prepare SSH key` and derived expected public key |
 | DigitalOcean account-key truth | proven | account key id `57820900` matches workflow-derived public key |
-| host-side key placement truth | blocked/unverified | account-level key presence does not prove `/root/.ssh/authorized_keys`; latest run failed with `Permission denied (publickey)` |
-| owner recovery route truth | partial | Gmail search found reset email for this droplet; credential value remains owner-only and unrecorded |
-| SSH auth truth | blocked | latest exercised run failed before remote shell with `Permission denied (publickey)` |
-| remote repo sync truth | not reached | requires workflow reaching remote shell and printing `[remote] synced_commit=...` |
+| host-side key placement truth | proven by user console output | key present in `/root/.ssh/authorized_keys`; SSHD configured to read it |
+| SSH auth truth | needs fresh proof | must run current `main`, not old run `b46e...` |
+| remote repo sync truth | not reached | requires fresh workflow reaching remote shell and printing `[remote] synced_commit=...` |
 | host bootstrap truth | not reached | requires remote Docker/compose execution evidence |
 | `.env.production` truth | not reached | must be verified on droplet, never committed |
 | local service health truth | not reached | deploy script checks local `/health`, `/ready`, `/deployment/status` on host |
@@ -69,20 +71,23 @@ Current first blocker remains SSH auth on the existing droplet.
 
 ## Current First Failing Proof Gate
 
-`Deploy to DigitalOcean droplet over SSH` is the current first failing proof gate from the newest exercised run available to this agent.
-
-Exact blocker: SSH to the configured droplet user fails with `Permission denied (publickey)` even though the workflow parses the private key, derives the expected public key, and that public key exists in the DigitalOcean account key list.
+Fresh current-`main` deploy proof is not visible yet. The first gate to test is now `Deploy to DigitalOcean droplet over SSH` using workflow commit `c21c112aa83adcea3e21fcc7bd1040cbcd2aee04` or newer.
 
 ## Exact Next Step
 
-Use the owner-controlled DigitalOcean reset email, DigitalOcean console, or an already-working SSH session to access droplet `134.199.144.115`, then append this public key to `/root/.ssh/authorized_keys` for `root`:
+In GitHub Actions, start a fresh `DigitalOcean Auto Deploy` run from current `main` using **Run workflow**, not re-run failed jobs from old run `29469547563`.
+
+Expected first proof lines if SSH clears:
 
 ```text
-ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC0VjJjMeayv3ggrElS2vZIDlXUIXw6fER+op4UVs4DQ github-actions-deploy
+deploy_target=root@134.199.144.115:22 app_dir=/opt/xrp-hbar-apex
+[remote] connected_user=root
+[remote] host=Digital-ocean-XRP-Hbar-Apex
+[remote] synced_commit=<current main commit>
 ```
 
-Then rerun `DigitalOcean Auto Deploy` for the next proof gate. If SSH passes, continue to remote repo sync, `.env.production`, Docker/Compose, local health, and public endpoint checks.
+If SSH passes, continue to remote repo sync, `.env.production`, Docker/Compose, local health, and public endpoint checks.
 
 ## Strict Success Standard
 
-Auto-deploy is not fully proven until a fresh workflow run succeeds, the host pulls the target commit, `deploy.sh` completes without manual intervention, and public `/health`, `/ready`, and `/deployment/status` all pass.
+Auto-deploy is not fully proven until a fresh current-`main` workflow run succeeds, the host pulls the target commit, `deploy.sh` completes without manual intervention, and public `/health`, `/ready`, and `/deployment/status` all pass.
