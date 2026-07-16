@@ -15,7 +15,7 @@ A prior fresh ED25519 keypair was also generated for deployment use on 2026-07-1
 - DigitalOcean key id: `57804116`
 - Fingerprint: `cd:a4:e3:6b:a3:a1:66:51:b6:f7:57:d9:ff:0b:30:5d`
 
-Private keys must not be committed to this repo, pasted into chat, or stored in any non-secret file.
+Private keys, passwords, reset tokens, and one-time credentials must not be committed to this repo, pasted into chat, or stored in any non-secret file.
 
 ## Existing Droplet
 
@@ -36,6 +36,14 @@ For the existing droplet `Digital-ocean-XRP-Hbar-Apex` at `134.199.144.115`, the
 ```
 
 Use either an already-working SSH session or the DigitalOcean web console to append the public key.
+
+## Current Access-Recovery Clue
+
+A read-only Gmail search on 2026-07-16 found a recent DigitalOcean Support message for this exact droplet with subject `Your Droplet's password has been reset. (Digital-ocean-XRP-Hbar-Apex)`.
+
+The password or reset value must not be copied into GitHub, docs, or chat. Use the original email or DigitalOcean console directly as an owner-controlled recovery path if no already-working SSH session is available.
+
+After access is regained, append the current Actions public key to `/root/.ssh/authorized_keys`, then rerun the deploy workflow.
 
 ## GitHub Actions Secret Required
 
