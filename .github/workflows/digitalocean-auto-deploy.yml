@@ -223,7 +223,7 @@ jobs:
           }
 
           failed=0
-          for path in health ready deployment/status vti/status; do
+          for path in health ready deployment/status vti/status email/newsletter/status; do
             if ! check_endpoint "$BASE_URL/$path"; then
               failed=1
             fi
@@ -239,6 +239,8 @@ jobs:
           PY
           )"
 
+          newsletter_payload='{"source_name":"Apex Newsletter Smoke","source_url":"https://ripple.com/solutions/stablecoin/","subject":"Newsletter smoke proof for RLUSD monitoring","received_at":"2026-07-16T09:45:00Z","summary":"Manual newsletter smoke: capture a research-email style source summary into durable runtime proof storage before live Gmail recurring sync is claimed.","tags":["rlusd","newsletter-smoke","manual-intake"]}'
+
           if ! check_post_json "$BASE_URL/vti/smoke" "$vti_payload"; then
             failed=1
           fi
@@ -251,10 +253,16 @@ jobs:
           if ! check_endpoint "$BASE_URL/vti/evidence?limit=5"; then
             failed=1
           fi
+          if ! check_post_json "$BASE_URL/email/newsletter/smoke" "$newsletter_payload"; then
+            failed=1
+          fi
+          if ! check_endpoint "$BASE_URL/email/newsletter/proof/latest"; then
+            failed=1
+          fi
 
           if [ "$failed" -ne 0 ]; then
             echo "BASE_URL endpoint checks failed. Probing direct droplet HTTP for routing diagnostics."
-            for path in health ready deployment/status vti/status "vti/evidence/$vti_source_id" vti/evidence/latest "vti/evidence?limit=5"; do
+            for path in health ready deployment/status vti/status email/newsletter/status "vti/evidence/$vti_source_id" vti/evidence/latest "vti/evidence?limit=5" email/newsletter/proof/latest; do
               curl -i --max-time 15 "http://${DIGITALOCEAN_HOST}/${path}" || true
             done
             curl -i --max-time 15 \
@@ -262,5 +270,10 @@ jobs:
               --request POST \
               --data "$vti_payload" \
               "http://${DIGITALOCEAN_HOST}/vti/smoke" || true
+            curl -i --max-time 15 \
+              --header 'Content-Type: application/json' \
+              --request POST \
+              --data "$newsletter_payload" \
+              "http://${DIGITALOCEAN_HOST}/email/newsletter/smoke" || true
             exit 1
           fi
