@@ -1,3 +1,7 @@
+{
+    auto_https off
+}
+
 (xrp_hbar_apex_proxy) {
     encode gzip zstd
 
