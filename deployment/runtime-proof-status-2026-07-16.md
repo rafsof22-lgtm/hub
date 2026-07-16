@@ -1,10 +1,14 @@
 # Runtime Proof Status - 2026-07-16
 
-Proof labels: `STANDING_AUTONOMY_APPROVED`, `DEPLOYMENT_DRIFT_CHECKED`, `GITHUB_ACTIONS_TRIGGER_VERIFIED`, `END_TO_END_NOT_VERIFIED`, `SECRET_OWNER_ACTION_REQUIRED`.
+Proof labels: `STANDING_AUTONOMY_APPROVED`, `DEPLOYMENT_DRIFT_CHECKED`, `GITHUB_ACTIONS_TRIGGER_VERIFIED`, `REPO_DOCS_ALIGNED`, `END_TO_END_NOT_VERIFIED`.
 
 ## Scope
 
 Target repo: `rafsof22-lgtm/hub`
+
+Target branch: `main`
+
+Target workflow: `.github/workflows/digitalocean-auto-deploy.yml`
 
 Target droplet: `Digital-ocean-XRP-Hbar-Apex`
 
@@ -14,74 +18,62 @@ Expected app dir: `/opt/xrp-hbar-apex`
 
 Expected deploy path: `deployment/runtime-scaffold-pack`
 
-## Proven From Current Run
+## Current Proven State
 
 - GitHub repo exists and default branch is `main`.
 - Connected GitHub app reports admin/maintain/push access to the repo.
-- `.github/workflows/digitalocean-auto-deploy.yml` exists on `main`.
-- Workflow validates expected deploy files before SSH deploy.
-- Workflow expects `DIGITALOCEAN_SSH_KEY` as an Actions secret.
-- Workflow expects `DIGITALOCEAN_HOST`, `DIGITALOCEAN_USER`, `DIGITALOCEAN_PORT`, `APP_DIR`, and `BASE_URL` as Actions variables or secrets.
-- DigitalOcean API confirms droplet `584697763` is active in `syd1` with public IPv4 `134.199.144.115`.
-- DigitalOcean API confirms SSH keys exist on the account, including `xrp-hbar-github-actions-2026-07-15-fresh`.
-- Public probes against `http://134.199.144.115/health`, `/ready`, and `/deployment/status` currently return `HTTP 403 Domain forbidden` from `envoy`.
-- Direct SSH from the current Codex container to `root@134.199.144.115:22` failed with `Network is unreachable`.
-- Direct `git clone` from the current Codex container failed due network policy: `CONNECT tunnel failed, response 403`.
-- Commit `91f13ff52ac2f1ef4d99d7117a6fb16a1da61013` triggered `DigitalOcean Auto Deploy` run `29463550411`.
-- Run `29463550411` failed in job `87511834686`, step `Prepare SSH key`.
-- First failing log line: `DIGITALOCEAN_SSH_KEY must contain a full private key block, or a base64-encoded private key block`.
+- `DigitalOcean Auto Deploy` exists on `main`.
+- `DigitalOcean Diagnostics` exists on `main`.
+- The deployment scaffold files exist in the repo.
+- The Flask app exposes `/health`, `/ready`, and `/deployment/status`.
+- The deploy script validates `.env.production`, rejects placeholders, starts Docker Compose, and checks local health endpoints.
+- The Caddyfile contains both `:80` fallback and `{$DOMAIN}` routing.
+- DigitalOcean API confirmed droplet `584697763` is active in `syd1` with public IPv4 `134.199.144.115`.
+- Earlier push-triggered workflow runs proved workflow trigger behavior.
+- Earlier run `29463550411` proved the prior first failing step was `Prepare SSH key` with invalid private-key format.
 
-## Current Blocker
+## Current User-Reported State Needing Fresh Workflow Proof
 
-`PLACEHOLDER_SECRET` / `INVALID_SECRET_FORMAT` on `DIGITALOCEAN_SSH_KEY`.
+The user reports the SSH key format blocker has since been cleared and that local-machine SSH auth to the droplet has been proven manually. This ledger does not mark those gates as GitHub Actions proven until a fresh workflow run shows them passing.
 
-The workflow is enabled and triggering, but the `DIGITALOCEAN_SSH_KEY` secret value is not a valid private SSH key block and is not a valid base64-encoded private key block. The deploy never reaches the droplet, so Docker, `.env.production`, Caddy, local health, public health, VTI smoke proof, and email/newsletter proof remain downstream and unverified.
+## Current Proof Gates
 
-A separate visible public route issue remains: the public IP currently returns `HTTP 403 Domain forbidden` from `envoy`, not from the intended Caddy/Flask stack. This may clear after a real deploy, but it cannot be proven until the SSH key secret is fixed and the deploy reaches the host.
-
-## Required Secret And Variable Placement
-
-Do not paste secret values into chat or commit them.
-
-| item | location | status |
+| gate | status | notes |
 |---|---|---|
-| `DIGITALOCEAN_HOST=134.199.144.115` | GitHub Actions variable or secret | needs GitHub UI/API verification |
-| `DIGITALOCEAN_USER=root` | GitHub Actions variable or secret | needs GitHub UI/API verification |
-| `DIGITALOCEAN_PORT=22` | GitHub Actions variable or secret | needs GitHub UI/API verification |
-| `APP_DIR=/opt/xrp-hbar-apex` | GitHub Actions variable or secret | needs GitHub UI/API verification |
-| `BASE_URL=<real live URL>` | GitHub Actions variable or secret | needs real domain value |
-| `DIGITALOCEAN_SSH_KEY=<private key>` | GitHub Actions secret only | invalid current value; secret owner action required |
-| `.env.production` | droplet only, never committed | secret owner action required |
+| workflow file truth | proven | file exists and was inspected |
+| workflow trigger truth | proven | push-triggered runs appeared previously |
+| SSH key format truth | pending fresh run | prior run failed; user reports fixed |
+| SSH auth truth | pending fresh run | user reports local SSH worked; Actions proof still needed |
+| remote repo sync truth | pending fresh run | requires SSH deploy step to reach remote commands |
+| host bootstrap truth | pending fresh run | requires Docker/Compose execution evidence |
+| `.env.production` truth | pending fresh run | host-only file, never committed |
+| local service health truth | pending fresh run | deploy script checks local endpoints |
+| public endpoint truth | pending fresh run | post-deploy checks now provide better diagnostics |
+| VTI runtime truth | not started | only after generic deploy proof |
+| email/newsletter live-ingestion truth | not started | only after generic deploy or separate Gmail proof |
 
-## Exact Fix For The Current Blocker
+## Repo-Side Changes Made In This Cleanup Pass
 
-Replace the GitHub Actions secret named `DIGITALOCEAN_SSH_KEY` with the full private key matching a public key authorized on the droplet.
+- Improved `Post-deploy live endpoint checks` in the deploy workflow with HTTP status, body preview, scheme validation, trailing-slash normalization, and direct droplet HTTP probes when `BASE_URL` checks fail.
+- Added canonical repo docs:
+  - `deployment/runtime-autopush-backlog.md`
+  - `deployment/github-auto-push-gap-analysis.md`
+  - `deployment/github-auto-deploy-setup.md`
+  - `deployment/secret-placement-map.md`
+- Preserved historical failure evidence while separating it from current pending proof gates.
 
-Accepted formats:
+## Current First Failing Proof Gate
 
-- full OpenSSH private key block beginning with `-----BEGIN OPENSSH PRIVATE KEY-----` and ending with `-----END OPENSSH PRIVATE KEY-----`
-- full PEM private key block beginning with `-----BEGIN ... PRIVATE KEY-----` and ending with `-----END ... PRIVATE KEY-----`
-- base64-encoded version of one of those full private key blocks
+Pending fresh run. The next deploy run must establish whether the first failing proof gate is now:
 
-Do not use:
+1. SSH key format,
+2. SSH auth,
+3. remote repo sync,
+4. host bootstrap / Docker,
+5. `.env.production`,
+6. local service health, or
+7. public `BASE_URL` endpoint routing.
 
-- the public key
-- the DigitalOcean SSH key name
-- the DigitalOcean SSH key ID
-- the fingerprint
-- a placeholder
-- a partial/private-key body without BEGIN and END lines
+## Strict Success Standard
 
-## Next Exact Actions
-
-1. In GitHub, replace `Settings -> Secrets and variables -> Actions -> Secrets -> DIGITALOCEAN_SSH_KEY` with the valid private key value.
-2. Confirm these variables/secrets exist: `DIGITALOCEAN_HOST`, `DIGITALOCEAN_USER`, `DIGITALOCEAN_PORT`, `APP_DIR`, and `BASE_URL`.
-3. Re-run workflow run `29463550411`, or push a fresh `main` commit after the secret is fixed.
-4. If `Prepare SSH key` passes, inspect the next failing step, likely SSH connectivity, missing `.env.production`, Docker/bootstrap, or public route.
-5. From an SSH-capable environment, connect to `root@134.199.144.115` and verify Docker, repo checkout, `.env.production`, containers, and local health endpoints.
-6. Fix the public route/domain so `/health`, `/ready`, and `/deployment/status` return success from the intended app.
-7. Only after generic deploy proof passes, run VTI and email/newsletter smoke proof.
-
-## Verification Standard
-
-Auto-deploy is not proven until a fresh `main` commit produces a successful workflow run, the host pulls that commit, `deploy.sh` completes without manual intervention, and public `/health`, `/ready`, and `/deployment/status` all pass.
+Auto-deploy is not proven until a fresh `main` workflow run succeeds, the host pulls the target commit, `deploy.sh` completes without manual intervention, and public `/health`, `/ready`, and `/deployment/status` all pass.
