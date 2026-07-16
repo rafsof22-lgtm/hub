@@ -1,6 +1,6 @@
 # Runtime Proof Status - 2026-07-16
 
-Proof labels: `STANDING_AUTONOMY_APPROVED`, `DEPLOYMENT_DRIFT_CHECKED`, `GITHUB_ACTIONS_TRIGGER_VERIFIED`, `REPO_DOCS_ALIGNED`, `WORKFLOW_TARGET_VALUES_PINNED`, `SSH_KEY_FORMAT_PROVEN`, `SSH_AUTH_BLOCKED`, `END_TO_END_NOT_VERIFIED`.
+Proof labels: `STANDING_AUTONOMY_APPROVED`, `DEPLOYMENT_DRIFT_CHECKED`, `GITHUB_ACTIONS_TRIGGER_VERIFIED`, `REPO_DOCS_ALIGNED`, `WORKFLOW_TARGET_VALUES_PINNED`, `SSH_KEY_FORMAT_PROVEN`, `SSH_AUTH_PROVEN`, `REMOTE_REPO_SYNC_PROVEN`, `HOST_BOOTSTRAP_PROVEN`, `PUBLIC_ENDPOINTS_PROVEN`, `CORE_RUNTIME_DEPLOYMENT_PROVEN`, `FRAMEWORK_LIVE_LAYERS_NOT_YET_PROVEN`.
 
 ## Scope
 
@@ -24,70 +24,64 @@ Expected deploy path: `deployment/runtime-scaffold-pack`
 - Connected GitHub app reports repo access and can update repo files/issues.
 - Deployment scaffold files exist in the repo.
 - The Flask app exposes `/health`, `/ready`, and `/deployment/status`.
-- The deploy script validates `.env.production`, rejects placeholders, starts Docker Compose, and checks local health endpoints.
 - DigitalOcean API confirmed droplet `584697763` is active in `syd1` with public IPv4 `134.199.144.115`.
 - DigitalOcean account key list contains public key id `57820900`, name `github-actions-deploy-2026-07-16-active`, fingerprint `cd:d7:63:29:26:e0:75:f0:6d:49:b0:74:88:f3:2b:73`.
-- User-provided droplet console output proves the deploy public key is present in `/root/.ssh/authorized_keys`, permissions are `700` for `/root/.ssh` and `600` for `authorized_keys`, `PermitRootLogin yes`, `PubkeyAuthentication yes`, and `AuthorizedKeysFile .ssh/authorized_keys .ssh/authorized_keys2`.
-- Historical reruns of run `29469547563` still checked out old commit `b46e969be6110e3326cf0b4236dd83cc3c93f445` and failed at SSH auth.
-- Workflow target values were pinned in `.github/workflows/digitalocean-auto-deploy.yml` in commit `c21c112aa83adcea3e21fcc7bd1040cbcd2aee04`:
+- User-provided droplet console output proved the deploy public key was present in `/root/.ssh/authorized_keys`, with `PermitRootLogin yes`, `PubkeyAuthentication yes`, and `AuthorizedKeysFile .ssh/authorized_keys .ssh/authorized_keys2`.
+- Workflow target values were pinned in commit `c21c112aa83adcea3e21fcc7bd1040cbcd2aee04`:
   - `DIGITALOCEAN_HOST=134.199.144.115`
   - `DIGITALOCEAN_USER=root`
   - `DIGITALOCEAN_PORT=22`
   - `APP_DIR=/opt/xrp-hbar-apex`
   - `BASE_URL=http://134.199.144.115`
-- The pinned workflow also prints `[remote] connected_user`, `[remote] host`, and `[remote] synced_commit` after successful SSH so the next proof gate is unambiguous.
-- Connector limitation: commit-associated workflow-run lookup returned no visible run for commit `c21c112aa83adcea3e21fcc7bd1040cbcd2aee04`; the available connector did not expose a general fresh `workflow_dispatch` action.
+- Fresh workflow run `29485379774` / `DigitalOcean Auto Deploy #89` for commit `d3aaf301334450cf1a216961c76c620c5aba6d7a` completed successfully.
+- Job `87578507636` passed all deploy steps:
+  - `Validate required deploy files exist`
+  - `Prepare SSH key`
+  - `Deploy to DigitalOcean droplet over SSH`
+  - `Post-deploy live endpoint checks`
+- Run logs proved SSH connected to the expected host as `root`:
+  - `deploy_target=root@134.199.144.115:22 app_dir=/opt/xrp-hbar-apex`
+  - `[remote] connected_user=root`
+  - `[remote] host=Digital-ocean-XRP-Hbar-Apex`
+- Remote repo sync was proven by run log line `synced_commit=d3aaf301334450cf1a216961c76c620c5aba6d7a`.
+- Host bootstrap was proven: Docker Compose pulled/built images, started Postgres, Redis, API, worker, and Caddy containers.
+- Container state was proven healthy enough for deploy completion: Postgres and Redis became healthy; API, worker, and Caddy started.
+- Public endpoint proof passed from GitHub Actions against `http://134.199.144.115`:
+  - `/health` returned `200` with `{"env":"production","service":"xrp-hbar-apex","status":"ok","version":"0.1.0"}`.
+  - `/ready` returned `200` with `{"postgres":"ok","redis":"ok","status":"ready"}`.
+  - `/deployment/status` returned `200` with `{"env":"production","service":"xrp-hbar-apex","stack":["app","postgres","redis","caddy"],"status":"running","version":"0.1.0"}`.
 
-## Latest Exercised Run Before Target Pinning
+## Superseded Historical Blocker
 
-- Run: `29469547563`
-- Latest old-run job attempt: `87574584632`
-- Checked-out commit in that rerun: `b46e969be6110e3326cf0b4236dd83cc3c93f445`
-- First failing step: `Deploy to DigitalOcean droplet over SSH`
-- Exact error: `Permission denied (publickey)`
-- `Prepare SSH key`: passed
-- `Post-deploy live endpoint checks`: skipped
-
-This old-run rerun is no longer the right proof vehicle because it checks out an old commit and old workflow state. The next proof must run the current `main` workflow at or after commit `c21c112aa83adcea3e21fcc7bd1040cbcd2aee04`.
+Old reruns of run `29469547563` checked out old commit `b46e969be6110e3326cf0b4236dd83cc3c93f445` and failed at `Deploy to DigitalOcean droplet over SSH` with `Permission denied (publickey)`. That evidence is now superseded by fresh successful run `29485379774` on current `main` commit `d3aaf301334450cf1a216961c76c620c5aba6d7a`.
 
 ## Current Proof Gates
 
 | gate | status | notes |
 |---|---|---|
-| workflow file truth | proven | current workflow pins target values in commit `c21c112aa83adcea3e21fcc7bd1040cbcd2aee04` |
-| workflow trigger/rerun truth | partial | historical reruns work, but connector cannot prove a fresh run for the new commit |
-| scaffold file truth | proven historically | validation passed in old-run reruns |
-| SSH key format truth | proven historically | old-run reruns passed `Prepare SSH key` and derived expected public key |
+| workflow file truth | proven | workflow exists and pins target values |
+| workflow trigger truth | proven | fresh push run `29485379774` executed current `main` |
+| scaffold file truth | proven | validation step passed |
+| SSH key format truth | proven | `Prepare SSH key` passed and derived the expected public key |
 | DigitalOcean account-key truth | proven | account key id `57820900` matches workflow-derived public key |
-| host-side key placement truth | proven by user console output | key present in `/root/.ssh/authorized_keys`; SSHD configured to read it |
-| SSH auth truth | needs fresh proof | must run current `main`, not old run `b46e...` |
-| remote repo sync truth | not reached | requires fresh workflow reaching remote shell and printing `[remote] synced_commit=...` |
-| host bootstrap truth | not reached | requires remote Docker/compose execution evidence |
-| `.env.production` truth | not reached | must be verified on droplet, never committed |
-| local service health truth | not reached | deploy script checks local `/health`, `/ready`, `/deployment/status` on host |
-| public endpoint truth | not reached | public checks only run after SSH deploy completes |
-| VTI runtime truth | not started | only after generic deploy proof |
-| email/newsletter live-ingestion truth | not started | only after generic deploy or separate Gmail proof |
+| host-side key placement truth | proven by owner console output | key present in `/root/.ssh/authorized_keys`; SSHD configured to read it |
+| SSH auth truth | proven | job `87578507636` connected to `root@134.199.144.115:22` |
+| remote repo sync truth | proven | `synced_commit=d3aaf301334450cf1a216961c76c620c5aba6d7a` |
+| host bootstrap truth | proven | Docker Compose pull/build/start completed |
+| `.env.production` truth | operationally proven for current scaffold | deploy script and services passed; secret values remain host-only and are not recorded here |
+| local service health truth | inferred through deploy completion | deploy script reached completion after waiting for local health endpoints |
+| public endpoint truth | proven | `/health`, `/ready`, `/deployment/status` returned `200` |
+| VTI runtime truth | not yet proven | no external VTI smoke test completed yet |
+| email/newsletter live-ingestion truth | not yet proven | no Gmail/newsletter ingestion proof completed yet |
 
-## Current First Failing Proof Gate
+## Current First Remaining Proof Gate
 
-Fresh current-`main` deploy proof is not visible yet. The first gate to test is now `Deploy to DigitalOcean droplet over SSH` using workflow commit `c21c112aa83adcea3e21fcc7bd1040cbcd2aee04` or newer.
+Core GitHub-to-DigitalOcean deployment is proven. The first remaining framework-specific proof gate is VTI runtime smoke proof or email/newsletter live-ingestion proof, depending on which layer is intended to be live next.
 
 ## Exact Next Step
 
-In GitHub Actions, start a fresh `DigitalOcean Auto Deploy` run from current `main` using **Run workflow**, not re-run failed jobs from old run `29469547563`.
-
-Expected first proof lines if SSH clears:
-
-```text
-deploy_target=root@134.199.144.115:22 app_dir=/opt/xrp-hbar-apex
-[remote] connected_user=root
-[remote] host=Digital-ocean-XRP-Hbar-Apex
-[remote] synced_commit=<current main commit>
-```
-
-If SSH passes, continue to remote repo sync, `.env.production`, Docker/Compose, local health, and public endpoint checks.
+Run one small framework-layer smoke test after the core runtime: either a VTI copied-link/transcript path, or a Gmail/newsletter scan that writes durable output to `newsletter-source-registry.md` and `email-intelligence-digest-log.md`.
 
 ## Strict Success Standard
 
-Auto-deploy is not fully proven until a fresh current-`main` workflow run succeeds, the host pulls the target commit, `deploy.sh` completes without manual intervention, and public `/health`, `/ready`, and `/deployment/status` all pass.
+Do not mark VTI or email/newsletter live-ingestion complete until each has its own end-to-end proof. Core deployment, SSH, remote sync, host bootstrap, and public runtime endpoints are now proven for run `29485379774`.
