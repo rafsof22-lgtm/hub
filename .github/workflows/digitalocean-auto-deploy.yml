@@ -118,6 +118,7 @@ jobs:
           fi
 
           echo "deploy_key_fingerprint=$(ssh-keygen -lf .deploy_ssh_key.pub | awk '{print $2, $4}')"
+          echo "deploy_public_key=$(cat .deploy_ssh_key.pub)"
 
       - name: Clear forced root password change
         env:
