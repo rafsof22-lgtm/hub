@@ -229,7 +229,7 @@ jobs:
             fi
           done
 
-          vti_payload='{"source_url":"https://example.com/xrp-hbar-apex-vti-smoke","platform":"manual-proof","title":"XRP HBAR Apex VTI smoke proof","transcript":"XRP and HBAR copied-link transcript smoke test for runtime proof.","ocr_text":"On-screen text smoke proof: XRP HBAR deployment ready."}'
+          vti_payload='{"source_url":"https://ripple.com/solutions/stablecoin/","platform":"official-web-copied-link","title":"Ripple USD stablecoin copied-link smoke proof","transcript":"Manual transcript smoke: Ripple USD is described as a regulated dollar-backed stablecoin relevant to XRP settlement infrastructure.","ocr_text":"Visible-page OCR smoke: Ripple USD stablecoin, reserves, compliance, payments."}'
           if ! check_post_json "$BASE_URL/vti/smoke" "$vti_payload"; then
             failed=1
           fi
