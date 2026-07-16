@@ -20,6 +20,29 @@ POSTGRES_DB = os.getenv("POSTGRES_DB", "xrp_hbar_apex")
 POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "change_me")
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
+GMAIL_NEWSLETTER_REQUIRED_ENV = [
+    "GMAIL_OAUTH_CLIENT_ID",
+    "GMAIL_OAUTH_CLIENT_SECRET",
+    "GMAIL_OAUTH_REFRESH_TOKEN"
+]
+GMAIL_NEWSLETTER_OPTIONAL_ENV = [
+    "GMAIL_OAUTH_TOKEN_URI",
+    "GMAIL_NEWSLETTER_QUERY",
+    "GMAIL_NEWSLETTER_MAX_RESULTS"
+]
+GMAIL_NEWSLETTER_REQUIRED_SCOPES = [
+    "https://www.googleapis.com/auth/gmail.readonly"
+]
+PLACEHOLDER_VALUES = {
+    "",
+    "change_me",
+    "your-client-id.apps.googleusercontent.com",
+    "your-client-secret",
+    "your-refresh-token",
+    "your-token-uri",
+    "placeholder",
+    "todo"
+}
 
 VTI_SMOKE_EVIDENCE_PROOF_OBJECT_SCHEMA = {
     "source_record": {
@@ -67,6 +90,27 @@ EMAIL_NEWSLETTER_PROOF_OBJECT_SCHEMA = {
         "recurring_newsletter_sync": "boolean",
         "automatic_claim_extraction": "boolean",
         "automatic_research_verification": "boolean"
+    }
+}
+
+GMAIL_NEWSLETTER_READINESS_PROOF_OBJECT_SCHEMA = {
+    "readiness_record": {
+        "route": "/email/newsletter/gmail/status",
+        "required_env": "Gmail OAuth env vars needed before live fetch",
+        "optional_env": "non-secret query/tuning env vars for later Gmail fetch",
+        "required_scopes": "minimum OAuth scopes required for read-only newsletter fetch"
+    },
+    "evidence": {
+        "env_names_declared": "boolean",
+        "required_scope_declared": "boolean",
+        "secret_values_hidden": "boolean",
+        "runtime_credentials_configured": "boolean"
+    },
+    "limits": {
+        "gmail_fetch_attempted": "boolean",
+        "gmail_credentials_validated": "boolean",
+        "gmail_messages_read": "boolean",
+        "recurring_sync_enabled": "boolean"
     }
 }
 
@@ -125,6 +169,18 @@ def _text_digest(value):
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
+def _env_status(name, required):
+    raw_value = os.getenv(name, "")
+    normalized = raw_value.strip()
+    configured = bool(normalized) and normalized.lower() not in PLACEHOLDER_VALUES
+    return {
+        "name": name,
+        "required": required,
+        "configured": configured,
+        "value_visible": False
+    }
+
+
 @app.route("/health")
 def health():
     return jsonify({
@@ -181,7 +237,8 @@ def deployment_status():
         "framework_layers": {
             "vti_smoke": "available",
             "vti_evidence_persistence": "available",
-            "email_newsletter_ingestion": "manual_smoke_persistence_available_not_recurring_proven"
+            "email_newsletter_ingestion": "manual_smoke_persistence_available_not_recurring_proven",
+            "gmail_newsletter_readiness": "readiness_route_available_fetch_pending_credentials"
         }
     }), 200
 
@@ -501,7 +558,8 @@ def email_newsletter_status():
             "postgres_newsletter_proof_persistence",
             "proof_id_newsletter_retrieval",
             "latest_newsletter_proof_retrieval",
-            "newsletter_proof_list_retrieval"
+            "newsletter_proof_list_retrieval",
+            "gmail_runtime_env_readiness_status"
         ],
         "proof_object_schema": EMAIL_NEWSLETTER_PROOF_OBJECT_SCHEMA,
         "proof_label": "EMAIL_NEWSLETTER_MANUAL_PROOF_ROUTE_AVAILABLE",
@@ -511,6 +569,43 @@ def email_newsletter_status():
             "no_automatic_claim_extraction_yet",
             "no_automatic_research_verification_yet"
         ]
+    }), 200
+
+
+@app.route("/email/newsletter/gmail/status")
+def email_newsletter_gmail_status():
+    required_env = [_env_status(name, True) for name in GMAIL_NEWSLETTER_REQUIRED_ENV]
+    optional_env = [_env_status(name, False) for name in GMAIL_NEWSLETTER_OPTIONAL_ENV]
+    required_configured = all(item["configured"] for item in required_env)
+
+    return jsonify({
+        "status": "ready_for_fetch_credentials_present" if required_configured else "pending_credentials",
+        "service": APP_NAME,
+        "env": APP_ENV,
+        "version": APP_VERSION,
+        "mode": "gmail_newsletter_readiness_status",
+        "proof_label": "GMAIL_NEWSLETTER_READINESS_ROUTE_PROVEN",
+        "proof_object_schema": GMAIL_NEWSLETTER_READINESS_PROOF_OBJECT_SCHEMA,
+        "required_env": required_env,
+        "optional_env": optional_env,
+        "required_scopes": GMAIL_NEWSLETTER_REQUIRED_SCOPES,
+        "evidence": {
+            "env_names_declared": True,
+            "required_scope_declared": True,
+            "secret_values_hidden": True,
+            "runtime_credentials_configured": required_configured
+        },
+        "limits": {
+            "gmail_fetch_attempted": False,
+            "gmail_credentials_validated": False,
+            "gmail_messages_read": False,
+            "recurring_sync_enabled": False
+        },
+        "next_gate": (
+            "add Gmail OAuth credentials to the runtime secret store, then add a read-only Gmail fetch smoke route"
+            if not required_configured
+            else "add a read-only Gmail fetch smoke route and verify OAuth token refresh without exposing message content"
+        )
     }), 200
 
 
