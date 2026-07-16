@@ -47,6 +47,29 @@ VTI_SMOKE_EVIDENCE_PROOF_OBJECT_SCHEMA = {
     }
 }
 
+EMAIL_NEWSLETTER_PROOF_OBJECT_SCHEMA = {
+    "newsletter_record": {
+        "proof_id": "deterministic sha256 prefix of source_name, source_url, subject, and summary",
+        "source_name": "newsletter, alert, or research-email source name",
+        "source_url": "source or archive URL, if available",
+        "subject": "email/newsletter subject or title",
+        "received_at": "submitted timestamp or null"
+    },
+    "evidence": {
+        "manual_intake_captured": "boolean",
+        "summary_captured": "boolean",
+        "tags": "list of strings",
+        "summary_sha256": "sha256 hash or null",
+        "persisted_at_utc": "ISO-8601 timestamp"
+    },
+    "limits": {
+        "gmail_connector_fetch": "boolean",
+        "recurring_newsletter_sync": "boolean",
+        "automatic_claim_extraction": "boolean",
+        "automatic_research_verification": "boolean"
+    }
+}
+
 
 def _db_connect():
     return psycopg.connect(
@@ -69,6 +92,24 @@ def _ensure_vti_evidence_table(conn):
                 domain TEXT NOT NULL,
                 platform TEXT NOT NULL,
                 title TEXT,
+                proof_label TEXT NOT NULL,
+                evidence JSONB NOT NULL,
+                limits JSONB NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+        """)
+
+
+def _ensure_email_newsletter_proof_table(conn):
+    with conn.cursor() as cur:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS email_newsletter_proof (
+                proof_id TEXT PRIMARY KEY,
+                source_name TEXT NOT NULL,
+                source_url TEXT,
+                subject TEXT NOT NULL,
+                received_at TEXT,
                 proof_label TEXT NOT NULL,
                 evidence JSONB NOT NULL,
                 limits JSONB NOT NULL,
@@ -142,7 +183,7 @@ def deployment_status():
         "framework_layers": {
             "vti_smoke": "available",
             "vti_evidence_persistence": "available",
-            "email_newsletter_ingestion": "partial_live_access_not_recurring_proven"
+            "email_newsletter_ingestion": "manual_smoke_persistence_available_not_recurring_proven"
         }
     }), 200
 
@@ -429,6 +470,194 @@ def vti_evidence_list():
         "count": len(rows),
         "limit": limit,
         "items": [_format_vti_evidence_row(row) for row in rows]
+    }), 200
+
+
+def _format_email_newsletter_proof_row(row):
+    return {
+        "proof_label": row["proof_label"],
+        "newsletter_record": {
+            "proof_id": row["proof_id"],
+            "source_name": row["source_name"],
+            "source_url": row["source_url"],
+            "subject": row["subject"],
+            "received_at": row["received_at"]
+        },
+        "evidence": row["evidence"],
+        "limits": row["limits"],
+        "created_at": row["created_at"].isoformat(),
+        "updated_at": row["updated_at"].isoformat()
+    }
+
+
+@app.route("/email/newsletter/status")
+def email_newsletter_status():
+    return jsonify({
+        "status": "ready",
+        "service": APP_NAME,
+        "env": APP_ENV,
+        "version": APP_VERSION,
+        "capabilities": [
+            "manual_newsletter_source_record_intake",
+            "manual_newsletter_summary_hashing",
+            "postgres_newsletter_proof_persistence",
+            "latest_newsletter_proof_retrieval"
+        ],
+        "proof_object_schema": EMAIL_NEWSLETTER_PROOF_OBJECT_SCHEMA,
+        "proof_label": "EMAIL_NEWSLETTER_MANUAL_PROOF_ROUTE_AVAILABLE",
+        "limits": [
+            "no_gmail_connector_fetch_in_runtime_yet",
+            "no_recurring_newsletter_sync_yet",
+            "no_automatic_claim_extraction_yet",
+            "no_automatic_research_verification_yet"
+        ]
+    }), 200
+
+
+@app.route("/email/newsletter/smoke", methods=["POST"])
+def email_newsletter_smoke():
+    payload = request.get_json(silent=True) or {}
+    source_name = str(payload.get("source_name", "")).strip()
+    source_url = str(payload.get("source_url", "")).strip()
+    subject = str(payload.get("subject", "")).strip()
+    received_at = str(payload.get("received_at", "")).strip()
+    summary = str(payload.get("summary", "")).strip()
+    tags = payload.get("tags", [])
+
+    if not source_name:
+        return jsonify({
+            "status": "invalid",
+            "error": "source_name is required"
+        }), 400
+    if not subject:
+        return jsonify({
+            "status": "invalid",
+            "error": "subject is required"
+        }), 400
+    if not isinstance(tags, list):
+        return jsonify({
+            "status": "invalid",
+            "error": "tags must be a list"
+        }), 400
+
+    clean_tags = [str(tag).strip() for tag in tags if str(tag).strip()]
+    proof_id = hashlib.sha256(
+        "|".join([source_name, source_url, subject, summary[:2000]]).encode("utf-8")
+    ).hexdigest()[:24]
+    proof_label = "EMAIL_NEWSLETTER_MANUAL_INTAKE_SMOKE_PROVEN"
+    evidence = {
+        "manual_intake_captured": True,
+        "summary_captured": bool(summary),
+        "tags": clean_tags,
+        "summary_sha256": _text_digest(summary),
+        "persisted_at_utc": datetime.now(timezone.utc).isoformat()
+    }
+    limits = {
+        "gmail_connector_fetch": False,
+        "recurring_newsletter_sync": False,
+        "automatic_claim_extraction": False,
+        "automatic_research_verification": False
+    }
+
+    try:
+        with _db_connect() as conn:
+            _ensure_email_newsletter_proof_table(conn)
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO email_newsletter_proof (
+                        proof_id, source_name, source_url, subject, received_at,
+                        proof_label, evidence, limits
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb)
+                    ON CONFLICT (proof_id) DO UPDATE SET
+                        source_name = EXCLUDED.source_name,
+                        source_url = EXCLUDED.source_url,
+                        subject = EXCLUDED.subject,
+                        received_at = EXCLUDED.received_at,
+                        proof_label = EXCLUDED.proof_label,
+                        evidence = EXCLUDED.evidence,
+                        limits = EXCLUDED.limits,
+                        updated_at = now();
+                    """,
+                    (
+                        proof_id,
+                        source_name,
+                        source_url or None,
+                        subject,
+                        received_at or None,
+                        proof_label,
+                        Jsonb(evidence),
+                        Jsonb(limits)
+                    )
+                )
+    except Exception as e:
+        return jsonify({
+            "status": "persistence_failed",
+            "error": str(e),
+            "newsletter_record": {
+                "proof_id": proof_id,
+                "source_name": source_name,
+                "source_url": source_url or None,
+                "subject": subject,
+                "received_at": received_at or None
+            },
+            "evidence": evidence,
+            "limits": limits
+        }), 503
+
+    return jsonify({
+        "status": "accepted",
+        "service": APP_NAME,
+        "mode": "email_newsletter_manual_smoke",
+        "proof_label": proof_label,
+        "persistence": "stored",
+        "retrieval_url": f"/email/newsletter/proof/{proof_id}",
+        "newsletter_record": {
+            "proof_id": proof_id,
+            "source_name": source_name,
+            "source_url": source_url or None,
+            "subject": subject,
+            "received_at": received_at or None
+        },
+        "evidence": evidence,
+        "limits": limits
+    }), 200
+
+
+@app.route("/email/newsletter/proof/latest")
+def email_newsletter_latest_proof():
+    try:
+        with _db_connect() as conn:
+            _ensure_email_newsletter_proof_table(conn)
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT proof_id, source_name, source_url, subject, received_at,
+                           proof_label, evidence, limits, created_at, updated_at
+                    FROM email_newsletter_proof
+                    ORDER BY updated_at DESC, created_at DESC
+                    LIMIT 1;
+                    """
+                )
+                row = cur.fetchone()
+    except Exception as e:
+        return jsonify({
+            "status": "latest_retrieval_failed",
+            "error": str(e)
+        }), 503
+
+    if not row:
+        return jsonify({
+            "status": "not_found",
+            "message": "no email/newsletter proof has been persisted yet"
+        }), 404
+
+    return jsonify({
+        "status": "found",
+        "service": APP_NAME,
+        "mode": "email_newsletter_latest_proof_retrieval",
+        **_format_email_newsletter_proof_row(row)
     }), 200
 
 
