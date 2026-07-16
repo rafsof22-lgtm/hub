@@ -45,49 +45,79 @@ jobs:
         run: |
           set -eu
 
-          if [ -z "$DIGITALOCEAN_SSH_KEY" ]; then
-            echo "DIGITALOCEAN_SSH_KEY must be saved as an Actions Secret, not a Variable"
+          if [ -z "${DIGITALOCEAN_SSH_KEY:-}" ]; then
+            echo "DIGITALOCEAN_SSH_KEY is missing or empty. Save the full private key as a GitHub Actions Secret."
             exit 1
           fi
 
           python3 - <<'PY'
-          import os
           import base64
+          import os
           from pathlib import Path
 
-          raw = os.environ["DIGITALOCEAN_SSH_KEY"].strip()
-          raw = raw.replace("\\n", "\n")
+          raw = os.environ.get("DIGITALOCEAN_SSH_KEY", "")
+          raw = raw.strip().lstrip("\ufeff")
+          raw = raw.replace("\r\n", "\n").replace("\r", "\n").replace("\\r\\n", "\n").replace("\\n", "\n")
 
           cleaned = []
           for line in raw.splitlines():
               value = line.strip()
-              if not value or value in {"COPY_START", "COPY_END"}:
+              if not value:
+                  continue
+              if value in {"COPY_START", "COPY_END", "```", "```text", "```pem"}:
                   continue
               if value.startswith("DIGITALOCEAN_SSH_KEY="):
                   value = value.split("=", 1)[1].strip().strip('"').strip("'")
               cleaned.append(value)
 
-          key = "\n".join(cleaned).strip() + "\n"
-          if "-----BEGIN " not in key and " PRIVATE KEY-----" not in key:
+          key = "\n".join(cleaned).strip()
+          if not key:
+              raise SystemExit("DIGITALOCEAN_SSH_KEY became empty after cleanup")
+          if key.startswith(("ssh-ed25519 ", "ssh-rsa ", "ecdsa-sha2-")):
+              raise SystemExit("DIGITALOCEAN_SSH_KEY contains a public key. GitHub Actions needs the matching private key block, not the public key.")
+
+          if "-----BEGIN " not in key or " PRIVATE KEY-----" not in key:
               try:
-                  decoded = base64.b64decode("".join(key.split()), validate=True).decode()
+                  decoded = base64.b64decode("".join(key.split()), validate=True).decode("utf-8")
               except Exception:
                   decoded = ""
               if decoded:
-                  key = decoded.strip() + "\n"
+                  key = decoded.strip()
 
           if "-----BEGIN " not in key or " PRIVATE KEY-----" not in key:
-              raise SystemExit("DIGITALOCEAN_SSH_KEY must contain a full private key block, or a base64-encoded private key block")
+              raise SystemExit("DIGITALOCEAN_SSH_KEY must be a full private key block, or base64 of a full private key block")
           if "-----END " not in key or " PRIVATE KEY-----" not in key:
               raise SystemExit("DIGITALOCEAN_SSH_KEY is missing the END private key line")
 
-          Path(".deploy_ssh_key").write_text(key)
+          Path(".deploy_ssh_key").write_text(key + "\n")
           PY
 
           chmod 600 .deploy_ssh_key
-          ssh-keygen -y -f .deploy_ssh_key > .deploy_ssh_key.pub
+          set +e
+          keygen_output="$(ssh-keygen -y -f .deploy_ssh_key 2>&1 > .deploy_ssh_key.pub)"
+          keygen_status=$?
+          set -e
+
+          if [ "$keygen_status" -ne 0 ]; then
+            echo "ssh-keygen failed while validating DIGITALOCEAN_SSH_KEY"
+            case "$keygen_output" in
+              *passphrase*|*incorrect\ passphrase*)
+                echo "DIGITALOCEAN_SSH_KEY appears to be passphrase-protected. Use a dedicated unencrypted deploy private key for GitHub Actions."
+                ;;
+              *invalid\ format*)
+                echo "DIGITALOCEAN_SSH_KEY has an invalid private-key format after cleanup. Re-save the full private key block with line breaks preserved."
+                ;;
+              *error\ in\ libcrypto*)
+                echo "DIGITALOCEAN_SSH_KEY is likely malformed or not an SSH private key."
+                ;;
+              *)
+                echo "$keygen_output"
+                ;;
+            esac
+            exit 1
+          fi
+
           echo "deploy_key_fingerprint=$(ssh-keygen -lf .deploy_ssh_key.pub | awk '{print $2, $4}')"
-          echo "deploy_public_key=$(cat .deploy_ssh_key.pub)"
 
       - name: Deploy to DigitalOcean droplet over SSH
         run: |
