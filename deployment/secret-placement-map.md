@@ -12,7 +12,7 @@ Public SSH keys and fingerprints are safe to record for verification. Private ke
 
 | item | belongs in | secret? | notes |
 |---|---|---:|---|
-| `DIGITALOCEAN_SSH_KEY` | GitHub Actions Secret | yes | full private key block or base64-encoded private key block only; current Actions key parses but is not accepted by the droplet |
+| `DIGITALOCEAN_SSH_KEY` | GitHub Actions Secret | yes | full private key block or base64-encoded private key block only; current Actions key parses but is not accepted by the droplet in latest exercised run |
 | `DIGITALOCEAN_HOST` | GitHub Actions Variable preferred | no | expected `134.199.144.115` |
 | `DIGITALOCEAN_USER` | GitHub Actions Variable preferred | no | expected `root` unless changed |
 | `DIGITALOCEAN_PORT` | GitHub Actions Variable preferred | no | expected `22` unless changed |
@@ -23,13 +23,13 @@ Public SSH keys and fingerprints are safe to record for verification. Private ke
 
 ## Current SSH Auth Proof
 
-Latest Actions proof:
+Latest exercised Actions proof available to this agent:
 
-- Run `29469547563` passed private-key parsing and printed deploy fingerprint `SHA256:EW6NvPhLbV8CxvvfGme6iSLTzyAii4AiSCQN2Cb+z6I (ED25519)`.
+- Run `29469547563`, job `87562750570` passed private-key parsing and printed deploy fingerprint `SHA256:EW6NvPhLbV8CxvvfGme6iSLTzyAii4AiSCQN2Cb+z6I (ED25519)`.
 - The derived public key was `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC0VjJjMeayv3ggrElS2vZIDlXUIXw6fER+op4UVs4DQ github-actions-deploy`.
-- The deploy step failed with `Permission denied (publickey)`.
+- The deploy step failed with `Permission denied (publickey)` before remote commands ran.
 
-This means the secret is syntactically valid, but the matching public key is not accepted for the configured droplet SSH user. The fix is to authorize that public key on the droplet for the configured user, expected `root`, or replace the secret with a private key whose public key is already authorized on the droplet.
+This means the secret is syntactically valid, but the matching public key is not accepted for the configured droplet SSH user in the latest exercised run. The fix is to authorize that public key on the droplet for the configured user, expected `root`, or replace the secret with a private key whose public key is already authorized on the droplet.
 
 ## Droplet-Only `.env.production`
 
