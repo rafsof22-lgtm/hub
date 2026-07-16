@@ -19,11 +19,11 @@ jobs:
     timeout-minutes: 20
 
     env:
-      DIGITALOCEAN_HOST: 134.199.144.115
+      DIGITALOCEAN_HOST: 209.38.21.147
       DIGITALOCEAN_USER: root
       DIGITALOCEAN_PORT: "22"
       APP_DIR: /opt/xrp-hbar-apex
-      BASE_URL: http://134.199.144.115
+      BASE_URL: http://209.38.21.147
 
     steps:
       - name: Checkout repository
@@ -118,7 +118,6 @@ jobs:
           fi
 
           echo "deploy_key_fingerprint=$(ssh-keygen -lf .deploy_ssh_key.pub | awk '{print $2, $4}')"
-          echo "deploy_public_key=$(cat .deploy_ssh_key.pub)"
 
       - name: Clear forced root password change
         env:
