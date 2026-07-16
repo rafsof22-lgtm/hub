@@ -134,7 +134,8 @@ def vti_status():
             "ocr_text_intake",
             "source_record_hashing",
             "postgres_smoke_evidence_persistence",
-            "source_id_evidence_retrieval"
+            "source_id_evidence_retrieval",
+            "latest_evidence_retrieval"
         ],
         "proof_label": "VTI_SMOKE_AND_RETRIEVAL_ROUTES_AVAILABLE",
         "limits": [
@@ -302,6 +303,59 @@ def vti_evidence(source_id):
         "limits": row["limits"],
         "created_at": row["created_at"].isoformat(),
         "updated_at": row["updated_at"].isoformat()
+    }), 200
+
+
+def _format_vti_evidence_row(row):
+    return {
+        "proof_label": row["proof_label"],
+        "source_record": {
+            "source_id": row["source_id"],
+            "source_url": row["source_url"],
+            "domain": row["domain"],
+            "platform": row["platform"],
+            "title": row["title"]
+        },
+        "evidence": row["evidence"],
+        "limits": row["limits"],
+        "created_at": row["created_at"].isoformat(),
+        "updated_at": row["updated_at"].isoformat()
+    }
+
+
+@app.route("/vti/evidence/latest")
+def vti_latest_evidence():
+    try:
+        with _db_connect() as conn:
+            _ensure_vti_evidence_table(conn)
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT source_id, source_url, domain, platform, title,
+                           proof_label, evidence, limits, created_at, updated_at
+                    FROM vti_smoke_evidence
+                    ORDER BY updated_at DESC, created_at DESC
+                    LIMIT 1;
+                    """
+                )
+                row = cur.fetchone()
+    except Exception as e:
+        return jsonify({
+            "status": "latest_retrieval_failed",
+            "error": str(e)
+        }), 503
+
+    if not row:
+        return jsonify({
+            "status": "not_found",
+            "message": "no VTI smoke evidence has been persisted yet"
+        }), 404
+
+    return jsonify({
+        "status": "found",
+        "service": APP_NAME,
+        "mode": "vti_latest_evidence_retrieval",
+        **_format_vti_evidence_row(row)
     }), 200
 
 
