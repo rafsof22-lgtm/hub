@@ -2,7 +2,7 @@
 
 Last updated: 2026-07-16
 
-Proof labels: `REPO_SIDE_TRUTH_ALIGNED`, `WORKFLOW_TRIGGER_PROVEN`, `SSH_KEY_FORMAT_PROVEN`, `SSH_AUTH_BLOCKED`, `END_TO_END_NOT_VERIFIED`.
+Proof labels: `REPO_SIDE_TRUTH_ALIGNED`, `WORKFLOW_RESTORED`, `WORKFLOW_TRIGGER_PROVEN`, `SSH_KEY_FORMAT_PROVEN`, `SSH_AUTH_BLOCKED`, `END_TO_END_NOT_VERIFIED`.
 
 ## Current Deployment Target
 
@@ -17,16 +17,16 @@ Proof labels: `REPO_SIDE_TRUTH_ALIGNED`, `WORKFLOW_TRIGGER_PROVEN`, `SSH_KEY_FOR
 
 | gate | status | evidence |
 |---|---|---|
-| workflow file truth | proven | workflow exists on `main` |
-| workflow trigger truth | proven | push-triggered workflow runs have appeared |
+| workflow file truth | proven | workflow restored and re-fetched on `main` in commit `4a5ed6a83de467ae944137ac43d331cc495a8364` |
+| workflow trigger truth | proven historically | push-triggered workflow runs have appeared; connector did not expose a new run/status for the restore commit |
 | scaffold file truth | proven | workflow validates deploy script, compose file, Caddyfile, Dockerfile, requirements, and app |
-| SSH key format truth | proven | `Prepare SSH key` passed in runs `29469334854`, `29469474129`, and `29469547563` |
-| SSH auth truth | blocked | run `29469547563` failed with `Permission denied (publickey)` using fingerprint `SHA256:EW6NvPhLbV8CxvvfGme6iSLTzyAii4AiSCQN2Cb+z6I` |
+| SSH key format truth | proven | `Prepare SSH key` passed in latest exercised run `29469547563`, job `87562750570` |
+| SSH auth truth | blocked | latest exercised run failed with `Permission denied (publickey)` using fingerprint `SHA256:EW6NvPhLbV8CxvvfGme6iSLTzyAii4AiSCQN2Cb+z6I` |
 | remote repo sync truth | not reached | requires workflow reaching remote shell and printing `[remote] synced_commit=...` |
 | host bootstrap truth | not reached | requires remote Docker/compose execution evidence |
 | `.env.production` truth | not reached | must be verified on droplet, never committed |
 | local service health truth | not reached | deploy script checks local `/health`, `/ready`, `/deployment/status` on host |
-| public endpoint truth | not reached in latest runs | public checks must pass against `BASE_URL` after SSH deploy completes |
+| public endpoint truth | not reached in latest exercised run | public checks must pass against `BASE_URL` after SSH deploy completes |
 | VTI runtime truth | not yet proven | only after generic deploy proof |
 | email/newsletter live-ingestion truth | not yet proven | only after generic deploy proof or separate Gmail workflow proof |
 
