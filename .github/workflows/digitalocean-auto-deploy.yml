@@ -18,6 +18,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
+    env:
+      DIGITALOCEAN_HOST: 134.199.144.115
+      DIGITALOCEAN_USER: root
+      DIGITALOCEAN_PORT: "22"
+      APP_DIR: /opt/xrp-hbar-apex
+      BASE_URL: http://134.199.144.115
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -83,20 +90,17 @@ jobs:
           echo "deploy_public_key=$(cat .deploy_ssh_key.pub)"
 
       - name: Deploy to DigitalOcean droplet over SSH
-        env:
-          DIGITALOCEAN_HOST: ${{ vars.DIGITALOCEAN_HOST || secrets.DIGITALOCEAN_HOST }}
-          DIGITALOCEAN_USER: ${{ vars.DIGITALOCEAN_USER || secrets.DIGITALOCEAN_USER }}
-          DIGITALOCEAN_PORT: ${{ vars.DIGITALOCEAN_PORT || secrets.DIGITALOCEAN_PORT }}
-          APP_DIR: ${{ vars.APP_DIR || secrets.APP_DIR }}
         run: |
           set -eu
 
           for required in DIGITALOCEAN_HOST DIGITALOCEAN_USER DIGITALOCEAN_PORT APP_DIR; do
             if [ -z "${!required}" ]; then
-              echo "$required must be saved as an Actions Variable or Secret"
+              echo "$required must be set in workflow env"
               exit 1
             fi
           done
+
+          echo "deploy_target=${DIGITALOCEAN_USER}@${DIGITALOCEAN_HOST}:${DIGITALOCEAN_PORT} app_dir=${APP_DIR}"
 
           ssh -i .deploy_ssh_key \
             -o StrictHostKeyChecking=accept-new \
@@ -128,14 +132,11 @@ jobs:
           REMOTE
 
       - name: Post-deploy live endpoint checks
-        env:
-          BASE_URL: ${{ vars.BASE_URL || secrets.BASE_URL }}
-          DIGITALOCEAN_HOST: ${{ vars.DIGITALOCEAN_HOST || secrets.DIGITALOCEAN_HOST }}
         run: |
           set -eu
 
           if [ -z "$BASE_URL" ]; then
-            echo "BASE_URL must be saved as an Actions Variable or Secret"
+            echo "BASE_URL must be set in workflow env"
             exit 1
           fi
 
@@ -180,12 +181,8 @@ jobs:
 
           if [ "$failed" -ne 0 ]; then
             echo "BASE_URL endpoint checks failed. Probing direct droplet HTTP for routing diagnostics."
-            if [ -n "${DIGITALOCEAN_HOST:-}" ]; then
-              for path in health ready deployment/status; do
-                curl -i --max-time 15 "http://${DIGITALOCEAN_HOST}/${path}" || true
-              done
-            else
-              echo "DIGITALOCEAN_HOST is empty; direct droplet probes skipped."
-            fi
+            for path in health ready deployment/status; do
+              curl -i --max-time 15 "http://${DIGITALOCEAN_HOST}/${path}" || true
+            done
             exit 1
           fi
