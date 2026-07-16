@@ -79,14 +79,39 @@ for container in xrp_hbar_apex_caddy xrp_hbar_apex_app xrp_hbar_apex_postgres xr
 done
 
 echo "[deploy] removing stale runtime-scaffold-pack containers if present"
-docker ps -a --format '{{.Names}}' | grep '^runtime-scaffold-pack-' | xargs -r docker rm -f >/dev/null 2>&1 || true
-docker network rm runtime-scaffold-pack_default >/dev/null 2>&1 || true
+stale_runtime_containers="$(docker ps -a --format '{{.Names}}' | grep '^runtime-scaffold-pack-' || true)"
+if [ -n "$stale_runtime_containers" ]; then
+  echo "$stale_runtime_containers" | while IFS= read -r container; do
+    if [ -n "$container" ]; then
+      echo "[deploy] removing stale container: $container"
+      docker rm -f "$container" >/dev/null 2>&1 || true
+    fi
+  done
+fi
+if docker network inspect runtime-scaffold-pack_default >/dev/null 2>&1; then
+  docker network rm runtime-scaffold-pack_default >/dev/null 2>&1 || true
+fi
 
 echo "[deploy] pulling latest images"
 $COMPOSE_CMD --env-file .env.production -f docker-compose.prod.yml pull || true
 
 echo "[deploy] starting services"
-$COMPOSE_CMD --env-file .env.production -f docker-compose.prod.yml up -d --remove-orphans --build --force-recreate
+if ! $COMPOSE_CMD --env-file .env.production -f docker-compose.prod.yml up -d --remove-orphans --build --force-recreate; then
+  echo "[deploy] compose up failed; retrying once after explicit stale container cleanup"
+  retry_runtime_containers="$(docker ps -a --format '{{.Names}}' | grep '^runtime-scaffold-pack-' || true)"
+  if [ -n "$retry_runtime_containers" ]; then
+    echo "$retry_runtime_containers" | while IFS= read -r container; do
+      if [ -n "$container" ]; then
+        echo "[deploy] retry cleanup container: $container"
+        docker rm -f "$container" >/dev/null 2>&1 || true
+      fi
+    done
+  fi
+  if docker network inspect runtime-scaffold-pack_default >/dev/null 2>&1; then
+    docker network rm runtime-scaffold-pack_default >/dev/null 2>&1 || true
+  fi
+  $COMPOSE_CMD --env-file .env.production -f docker-compose.prod.yml up -d --remove-orphans --build --force-recreate
+fi
 
 echo "[deploy] current status"
 $COMPOSE_CMD --env-file .env.production -f docker-compose.prod.yml ps
