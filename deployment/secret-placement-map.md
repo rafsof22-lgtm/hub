@@ -12,12 +12,12 @@ Public SSH keys and fingerprints are safe to record for verification. Private ke
 
 | item | belongs in | secret? | notes |
 |---|---|---:|---|
-| `DIGITALOCEAN_SSH_KEY` | GitHub Actions Secret | yes | must be a full private OpenSSH key block or base64-encoded private key block; latest rerun job `87568284263` failed because this value did not parse as either |
+| `DIGITALOCEAN_SSH_KEY` | GitHub Actions Secret | yes | full private OpenSSH key block or base64-encoded private key block; latest rerun job `87571675414` parses this value successfully and derives the expected public key |
 | `DIGITALOCEAN_HOST` | GitHub Actions Variable preferred | no | expected `134.199.144.115` |
 | `DIGITALOCEAN_USER` | GitHub Actions Variable preferred | no | expected `root` unless changed |
 | `DIGITALOCEAN_PORT` | GitHub Actions Variable preferred | no | expected `22` unless changed |
 | `APP_DIR` | GitHub Actions Variable preferred | no | expected `/opt/xrp-hbar-apex` |
-| `BASE_URL` | GitHub Actions Variable or Secret | usually no | must include `http://` or `https://`; must target live app |
+| `BASE_URL` | GitHub Actions Variable or Secret | usually no | expected `http://134.199.144.115` for current proof testing unless a real domain is intentionally used |
 | `DIGITALOCEAN_ACCESS_TOKEN` | GitHub Actions Secret | yes | only needed for diagnostics workflow |
 | `DIGITALOCEAN_DROPLET_ID` | GitHub Actions Variable preferred | no | expected `584697763` if diagnostics workflow is used |
 
@@ -25,53 +25,24 @@ Public SSH keys and fingerprints are safe to record for verification. Private ke
 
 Latest exercised Actions proof available to this agent:
 
-- Run `29469547563`, latest job attempt `87568284263`, failed at `Prepare SSH key`.
-- Exact error: `DIGITALOCEAN_SSH_KEY must contain a full private key block, or a base64-encoded private key block`.
-- `Deploy to DigitalOcean droplet over SSH` and public endpoint checks were skipped.
+- Run `29469547563`, latest job attempt `87571675414`, passed `Prepare SSH key`.
+- Derived fingerprint: `SHA256:EW6NvPhLbV8CxvvfGme6iSLTzyAii4AiSCQN2Cb+z6I (ED25519)`.
+- Derived public key: `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC0VjJjMeayv3ggrElS2vZIDlXUIXw6fER+op4UVs4DQ github-actions-deploy`.
+- The deploy step failed with `Permission denied (publickey)` before remote commands ran.
 
-Previous attempt evidence still matters as history:
+DigitalOcean account key inventory contains the same public key as key id `57820900`, name `github-actions-deploy-2026-07-16-active`, fingerprint `cd:d7:63:29:26:e0:75:f0:6d:49:b0:74:88:f3:2b:73`.
 
-- Prior job `87562750570` passed private-key parsing and derived public key `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC0VjJjMeayv3ggrElS2vZIDlXUIXw6fER+op4UVs4DQ github-actions-deploy`.
-- DigitalOcean account key list contains that public key as key id `57820900`, name `github-actions-deploy-2026-07-16-active`, fingerprint `cd:d7:63:29:26:e0:75:f0:6d:49:b0:74:88:f3:2b:73`.
-- That prior job then failed with `Permission denied (publickey)`, meaning account-level key presence alone did not prove existing-droplet authorization.
+Current first blocker is existing-droplet SSH authorization, not secret format.
 
-Current first blocker is now secret content/format, before SSH auth can be retested.
+## Host-Side Authorization Fix
 
-## Required Secret Fix
-
-Replace GitHub Actions Secret `DIGITALOCEAN_SSH_KEY` with exactly one of:
-
-1. A full private OpenSSH key block matching a public key authorized on the droplet:
-
-```text
------BEGIN OPENSSH PRIVATE KEY-----
-...
------END OPENSSH PRIVATE KEY-----
-```
-
-2. Or a base64-encoded version of the complete private key block.
-
-Do not include:
-
-- `DIGITALOCEAN_SSH_KEY=`
-- quotes
-- markdown fences
-- `COPY_START`
-- `COPY_END`
-- comments or wrapper text
-- the public key instead of the private key
-
-## Host-Side Authorization Fix After Secret Parses
-
-Once `Prepare SSH key` passes again, the next likely blocker is SSH auth on the existing droplet.
-
-If the workflow derives this public key again:
+Make sure this public key is present for the configured user:
 
 ```text
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC0VjJjMeayv3ggrElS2vZIDlXUIXw6fER+op4UVs4DQ github-actions-deploy
 ```
 
-make sure it is present for the configured user at:
+Expected host-side location:
 
 ```text
 /root/.ssh/authorized_keys
