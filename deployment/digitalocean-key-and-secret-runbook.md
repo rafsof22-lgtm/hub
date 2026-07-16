@@ -2,15 +2,20 @@
 
 ## Current Safe Status
 
-A fresh ED25519 keypair was generated for GitHub Actions deployment use on 2026-07-15.
+DigitalOcean account key inventory currently includes the GitHub Actions deploy public key used by the latest workflow run:
 
-The public key was added to the DigitalOcean account:
+- DigitalOcean key name: `github-actions-deploy-2026-07-16-active`
+- DigitalOcean key id: `57820900`
+- Fingerprint: `cd:d7:63:29:26:e0:75:f0:6d:49:b0:74:88:f3:2b:73`
+- Public key: `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC0VjJjMeayv3ggrElS2vZIDlXUIXw6fER+op4UVs4DQ github-actions-deploy`
+
+A prior fresh ED25519 keypair was also generated for deployment use on 2026-07-15 and added to the DigitalOcean account:
 
 - DigitalOcean key name: `xrp-hbar-github-actions-2026-07-15-fresh`
 - DigitalOcean key id: `57804116`
 - Fingerprint: `cd:a4:e3:6b:a3:a1:66:51:b6:f7:57:d9:ff:0b:30:5d`
 
-The private key must not be committed to this repo, pasted into chat, or stored in any non-secret file.
+Private keys must not be committed to this repo, pasted into chat, or stored in any non-secret file.
 
 ## Existing Droplet
 
@@ -24,7 +29,7 @@ The private key must not be committed to this repo, pasted into chat, or stored 
 
 Adding a public key to the DigitalOcean account does not automatically install that key on an existing droplet.
 
-For the existing droplet `Digital-ocean-XRP-Hbar-Apex` at `134.199.144.115`, the public key must also be present in:
+For the existing droplet `Digital-ocean-XRP-Hbar-Apex` at `134.199.144.115`, the public key used by GitHub Actions must also be present in:
 
 ```text
 /root/.ssh/authorized_keys
@@ -37,10 +42,16 @@ Use either an already-working SSH session or the DigitalOcean web console to app
 Set this GitHub Actions Secret:
 
 ```text
-DIGITALOCEAN_SSH_KEY=<full private OpenSSH key block matching fingerprint cd:a4:e3:6b:a3:a1:66:51:b6:f7:57:d9:ff:0b:30:5d>
+DIGITALOCEAN_SSH_KEY=<full private OpenSSH key block matching the public key authorized on the droplet>
 ```
 
-The value must include:
+The current workflow-derived public key is:
+
+```text
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC0VjJjMeayv3ggrElS2vZIDlXUIXw6fER+op4UVs4DQ github-actions-deploy
+```
+
+The private key value must include:
 
 ```text
 -----BEGIN OPENSSH PRIVATE KEY-----
@@ -74,7 +85,7 @@ BASE_URL=https://<real-live-domain>
 
 ## DigitalOcean API Token Improvement
 
-A diagnostics workflow now exists at:
+A diagnostics workflow may be used when present at:
 
 ```text
 .github/workflows/digitalocean-diagnostics.yml
