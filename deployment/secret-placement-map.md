@@ -12,7 +12,7 @@ Public SSH keys and fingerprints are safe to record for verification. Private ke
 
 | item | belongs in | secret? | notes |
 |---|---|---:|---|
-| `DIGITALOCEAN_SSH_KEY` | GitHub Actions Secret | yes | full private key block or base64-encoded private key block only; current Actions key parses but is not accepted by the droplet in latest exercised run |
+| `DIGITALOCEAN_SSH_KEY` | GitHub Actions Secret | yes | full private key block or base64-encoded private key block only; current Actions key parses but is not accepted by the existing droplet user in latest exercised run |
 | `DIGITALOCEAN_HOST` | GitHub Actions Variable preferred | no | expected `134.199.144.115` |
 | `DIGITALOCEAN_USER` | GitHub Actions Variable preferred | no | expected `root` unless changed |
 | `DIGITALOCEAN_PORT` | GitHub Actions Variable preferred | no | expected `22` unless changed |
@@ -27,9 +27,26 @@ Latest exercised Actions proof available to this agent:
 
 - Run `29469547563`, job `87562750570` passed private-key parsing and printed deploy fingerprint `SHA256:EW6NvPhLbV8CxvvfGme6iSLTzyAii4AiSCQN2Cb+z6I (ED25519)`.
 - The derived public key was `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC0VjJjMeayv3ggrElS2vZIDlXUIXw6fER+op4UVs4DQ github-actions-deploy`.
-- The deploy step failed with `Permission denied (publickey)` before remote commands ran.
+- DigitalOcean account key list contains that same public key as key id `57820900`, name `github-actions-deploy-2026-07-16-active`, fingerprint `cd:d7:63:29:26:e0:75:f0:6d:49:b0:74:88:f3:2b:73`.
+- The deploy step still failed with `Permission denied (publickey)` before remote commands ran.
 
-This means the secret is syntactically valid, but the matching public key is not accepted for the configured droplet SSH user in the latest exercised run. The fix is to authorize that public key on the droplet for the configured user, expected `root`, or replace the secret with a private key whose public key is already authorized on the droplet.
+This means the secret is syntactically valid and the matching public key exists at the DigitalOcean account level, but the key is not accepted for the configured user on the existing droplet in the latest exercised run. Account-level key presence does not prove the key is installed in `/root/.ssh/authorized_keys` on an already-created droplet.
+
+## Current Required Fix
+
+Authorize the current Actions public key on the existing droplet for the configured user, expected `root`, or replace the secret with a private key whose public key is already authorized on the droplet.
+
+Current Actions public key:
+
+```text
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC0VjJjMeayv3ggrElS2vZIDlXUIXw6fER+op4UVs4DQ github-actions-deploy
+```
+
+Expected host-side location:
+
+```text
+/root/.ssh/authorized_keys
+```
 
 ## Droplet-Only `.env.production`
 
