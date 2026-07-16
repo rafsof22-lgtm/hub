@@ -1,6 +1,6 @@
 # Runtime Proof Status - 2026-07-16
 
-Proof labels: `STANDING_AUTONOMY_APPROVED`, `DEPLOYMENT_DRIFT_CHECKED`, `GITHUB_ACTIONS_TRIGGER_VERIFIED`, `REPO_DOCS_ALIGNED`, `SSH_AUTH_PROVEN`, `REMOTE_DEPLOY_REACHED`, `PUBLIC_ENDPOINT_ROUTING_FIXED_PENDING_RERUN`, `END_TO_END_NOT_VERIFIED`.
+Proof labels: `STANDING_AUTONOMY_APPROVED`, `DEPLOYMENT_DRIFT_CHECKED`, `GITHUB_ACTIONS_TRIGGER_VERIFIED`, `REPO_DOCS_ALIGNED`, `WORKFLOW_RESTORED`, `SSH_KEY_FORMAT_PROVEN`, `SSH_AUTH_BLOCKED`, `END_TO_END_NOT_VERIFIED`.
 
 ## Scope
 
@@ -22,8 +22,7 @@ Expected deploy path: `deployment/runtime-scaffold-pack`
 
 - GitHub repo exists and default branch is `main`.
 - Connected GitHub app reports admin/maintain/push access to the repo.
-- `DigitalOcean Auto Deploy` exists on `main`.
-- `DigitalOcean Diagnostics` exists on `main`.
+- `DigitalOcean Auto Deploy` was restored on `main` in commit `4a5ed6a83de467ae944137ac43d331cc495a8364` and re-fetched successfully.
 - The deployment scaffold files exist in the repo.
 - The Flask app exposes `/health`, `/ready`, and `/deployment/status`.
 - The deploy script validates `.env.production`, rejects placeholders, starts Docker Compose, and checks local health endpoints.
@@ -31,50 +30,42 @@ Expected deploy path: `deployment/runtime-scaffold-pack`
 - Earlier push-triggered workflow runs proved workflow trigger behavior.
 - Earlier run `29463550411` proved the prior first failing step was `Prepare SSH key` with invalid private-key format.
 - Later runs proved `Prepare SSH key` passes and derives public key `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC0VjJjMeayv3ggrElS2vZIDlXUIXw6fER+op4UVs4DQ github-actions-deploy`.
-- After that public key was authorized on the droplet, the deploy advanced past the earlier SSH-auth failure.
-- User-provided latest log shows remote deploy completed far enough for the workflow to enter `Post-deploy live endpoint checks`.
-- User-provided latest log shows public endpoint checks failed because `http://134.199.144.115/...` was redirected by Caddy to `https://134.199.144.115/...`, then curl failed TLS with `tlsv1 alert internal error`.
-- Direct diagnostic probes in the latest user-provided log returned `HTTP/1.1 308 Permanent Redirect` from `Server: Caddy` to `https://134.199.144.115/...` for `/health`, `/ready`, and `/deployment/status`.
+- Latest available rerun inspected in this pass: run `29469547563`, job `87562750570`.
+- Latest available rerun still fails at `Deploy to DigitalOcean droplet over SSH` with `Permission denied (publickey)`.
+- Latest available rerun does not reach remote repo sync, host bootstrap, `.env.production`, local health, public endpoint, VTI, or email-ingestion proof.
 
 ## Current Proof Gates
 
 | gate | status | notes |
 |---|---|---|
-| workflow file truth | proven | file exists and was inspected |
-| workflow trigger truth | proven | push-triggered runs appeared |
-| SSH key format truth | proven | `Prepare SSH key` passes |
-| SSH auth truth | proven after droplet authorization | workflow advanced beyond SSH into deploy/public checks per latest user-provided log |
-| remote repo sync truth | reached | deploy step advanced far enough to reach post-deploy endpoint checks |
-| host bootstrap truth | reached | deploy step advanced far enough to reach post-deploy endpoint checks |
-| `.env.production` truth | reached | deploy did not stop at missing/placeholder env before post-deploy checks |
-| local service health truth | reached | deploy did not stop at local `/health`, `/ready`, or `/deployment/status` before post-deploy checks |
-| public endpoint truth | fixed pending rerun | Caddy HTTP-to-HTTPS redirect on bare IP caused TLS failure; repo fix pushed |
+| workflow file truth | proven | restored and re-fetched on `main` in commit `4a5ed6a83de467ae944137ac43d331cc495a8364` |
+| workflow trigger truth | proven historically | prior push-triggered runs appeared; connected run list is limited and did not expose a new run for the restore commit |
+| scaffold file truth | proven in latest exercised run | validation passed in run `29469547563`, job `87562750570` |
+| SSH key format truth | proven | `Prepare SSH key` passed in latest exercised run |
+| SSH auth truth | blocked | latest exercised run failed before remote shell with `Permission denied (publickey)` |
+| remote repo sync truth | not reached | requires workflow reaching remote shell and printing `[remote] synced_commit=...` |
+| host bootstrap truth | not reached | requires remote Docker/compose execution evidence |
+| `.env.production` truth | not reached | must be verified on droplet, never committed |
+| local service health truth | not reached | deploy script checks local `/health`, `/ready`, `/deployment/status` on host |
+| public endpoint truth | not reached in latest exercised run | public checks only run after SSH deploy completes |
 | VTI runtime truth | not started | only after generic deploy proof |
 | email/newsletter live-ingestion truth | not started | only after generic deploy or separate Gmail proof |
 
-## Repo-Side Changes Made In This Cleanup Pass
+## Repo-Side Changes Confirmed
 
-- Improved `Post-deploy live endpoint checks` in the deploy workflow with HTTP status, body preview, scheme validation, redirect reporting, and direct droplet HTTP probes.
-- Pinned workflow target values to the intended deployment target: `root@134.199.144.115:22`, app dir `/opt/xrp-hbar-apex`, and `BASE_URL=http://134.199.144.115`.
-- Added remote synced commit output to the SSH deploy step for future remote repo sync proof.
-- Added deploy-key fingerprint and public-key output to the workflow so SSH auth failures can be matched without exposing private key material.
-- Added `auto_https off` to the runtime Caddyfile so IP-based HTTP health checks are not redirected to invalid bare-IP HTTPS.
-- Added canonical repo docs:
-  - `deployment/runtime-autopush-backlog.md`
-  - `deployment/github-auto-push-gap-analysis.md`
-  - `deployment/github-auto-deploy-setup.md`
-  - `deployment/secret-placement-map.md`
-- Updated issue #1 to track current proof gates instead of stale missing-scaffold language.
+- Restored `.github/workflows/digitalocean-auto-deploy.yml` on `main` in commit `4a5ed6a83de467ae944137ac43d331cc495a8364` after the current branch returned 404 for that path.
+- Workflow includes required file validation, SSH private-key cleanup/fingerprinting, remote synced-commit output, deploy script execution, and public endpoint checks.
+- Deployment docs and issue #1 should treat SSH auth as the current exercised blocker until a newer run proves remote shell access.
 
 ## Current First Failing Proof Gate
 
-`public endpoint truth` was the current first failing proof gate in the latest user-provided run.
+`SSH auth truth` is the current first failing proof gate from the newest exercised run available to this agent.
 
-Current exact blocker: Caddy redirected bare-IP HTTP checks to `https://134.199.144.115/...`; curl then failed TLS on the IP target. Repo fixes have been pushed to disable Caddy automatic HTTPS for this IP-based deployment and to avoid masking redirects with `curl --location`.
+Exact blocker: the workflow parses the private key and derives the public key, but SSH to the configured droplet user fails with `Permission denied (publickey)` before remote commands execute.
 
 ## Exact Next Step
 
-Run `DigitalOcean Auto Deploy` again on `main` after commits `f40e469c21c384a48ce9eb4c95e59667314a562c` and `956671dd131ccd6a7118175d47c3c2cbd2da1163`. The next run should redeploy the updated Caddyfile and then recheck public `/health`, `/ready`, and `/deployment/status` over HTTP.
+Use GitHub Actions or a supported run-inspection path to exercise restored workflow commit `4a5ed6a83de467ae944137ac43d331cc495a8364`. If it still derives public key `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC0VjJjMeayv3ggrElS2vZIDlXUIXw6fER+op4UVs4DQ github-actions-deploy` and fails with `Permission denied (publickey)`, authorize that public key for the configured droplet user or replace `DIGITALOCEAN_SSH_KEY` with the private key for an already-authorized droplet key.
 
 ## Strict Success Standard
 
