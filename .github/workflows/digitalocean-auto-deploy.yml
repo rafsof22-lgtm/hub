@@ -1,0 +1,202 @@
+name: DigitalOcean Auto Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: digitalocean-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    env:
+      DIGITALOCEAN_HOST: ${{ vars.DIGITALOCEAN_HOST || secrets.DIGITALOCEAN_HOST || '134.199.144.115' }}
+      DIGITALOCEAN_USER: ${{ vars.DIGITALOCEAN_USER || secrets.DIGITALOCEAN_USER || 'root' }}
+      DIGITALOCEAN_PORT: ${{ vars.DIGITALOCEAN_PORT || secrets.DIGITALOCEAN_PORT || '22' }}
+      APP_DIR: ${{ vars.APP_DIR || secrets.APP_DIR || '/opt/xrp-hbar-apex' }}
+      BASE_URL: ${{ vars.BASE_URL || secrets.BASE_URL || 'http://134.199.144.115' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Validate required deploy files exist
+        run: |
+          set -eu
+          test -f deployment/runtime-scaffold-pack/deploy.sh
+          test -f deployment/runtime-scaffold-pack/docker-compose.prod.yml
+          test -f deployment/runtime-scaffold-pack/Caddyfile
+          test -f deployment/runtime-scaffold-pack/.env.production.example
+          test -f deployment/runtime-scaffold-pack/services/xrp-hbar-apex/Dockerfile
+          test -f deployment/runtime-scaffold-pack/services/xrp-hbar-apex/requirements.txt
+          test -f deployment/runtime-scaffold-pack/services/xrp-hbar-apex/app.py
+
+      - name: Prepare SSH key
+        env:
+          DIGITALOCEAN_SSH_KEY: ${{ secrets.DIGITALOCEAN_SSH_KEY }}
+        run: |
+          set -eu
+
+          if [ -z "${DIGITALOCEAN_SSH_KEY:-}" ]; then
+            echo "DIGITALOCEAN_SSH_KEY must be saved as an Actions Secret, not a Variable"
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          import base64
+          import os
+          from pathlib import Path
+
+          raw = os.environ.get("DIGITALOCEAN_SSH_KEY", "")
+          raw = raw.strip().lstrip("\ufeff")
+          raw = raw.replace("\r\n", "\n").replace("\r", "\n")
+          raw = raw.replace("\\r\\n", "\n").replace("\\n", "\n")
+
+          cleaned = []
+          for line in raw.splitlines():
+              value = line.strip()
+              if not value:
+                  continue
+              if value in {"COPY_START", "COPY_END", "```", "```text", "```pem"}:
+                  continue
+              if value.startswith("DIGITALOCEAN_SSH_KEY="):
+                  value = value.split("=", 1)[1].strip().strip('"').strip("'")
+              cleaned.append(value)
+
+          key = "\n".join(cleaned).strip()
+          if not key:
+              raise SystemExit("DIGITALOCEAN_SSH_KEY became empty after cleanup")
+          if key.startswith(("ssh-ed25519 ", "ssh-rsa ", "ecdsa-sha2-")):
+              raise SystemExit("DIGITALOCEAN_SSH_KEY contains a public key. GitHub Actions needs the matching private key block, not the public key.")
+
+          if "-----BEGIN " not in key or " PRIVATE KEY-----" not in key:
+              try:
+                  decoded = base64.b64decode("".join(key.split()), validate=True).decode("utf-8")
+              except Exception:
+                  decoded = ""
+              if decoded:
+                  key = decoded.strip()
+
+          if "-----BEGIN " not in key or " PRIVATE KEY-----" not in key:
+              raise SystemExit("DIGITALOCEAN_SSH_KEY must contain a full private key block, or a base64-encoded private key block")
+          if "-----END " not in key or " PRIVATE KEY-----" not in key:
+              raise SystemExit("DIGITALOCEAN_SSH_KEY is missing the END private key line")
+
+          Path(".deploy_ssh_key").write_text(key + "\n")
+          PY
+
+          chmod 600 .deploy_ssh_key
+          ssh-keygen -y -f .deploy_ssh_key > .deploy_ssh_key.pub
+          echo "deploy_key_fingerprint=$(ssh-keygen -lf .deploy_ssh_key.pub | awk '{print $2, $4}')"
+          echo "deploy_public_key=$(cat .deploy_ssh_key.pub)"
+
+      - name: Deploy to DigitalOcean droplet over SSH
+        run: |
+          set -eu
+
+          for required in DIGITALOCEAN_HOST DIGITALOCEAN_USER DIGITALOCEAN_PORT APP_DIR; do
+            if [ -z "${!required}" ]; then
+              echo "$required must be saved as an Actions Variable or Secret"
+              exit 1
+            fi
+          done
+
+          echo "deploy_target=${DIGITALOCEAN_USER}@${DIGITALOCEAN_HOST}:${DIGITALOCEAN_PORT} app_dir=${APP_DIR}"
+
+          ssh -i .deploy_ssh_key \
+            -o StrictHostKeyChecking=accept-new \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o PreferredAuthentications=publickey \
+            -p "$DIGITALOCEAN_PORT" \
+            "$DIGITALOCEAN_USER@$DIGITALOCEAN_HOST" \
+            APP_DIR="$APP_DIR" 'bash -s' <<'REMOTE'
+          set -eu
+
+          REPO_URL="https://github.com/rafsof22-lgtm/hub.git"
+          BRANCH="main"
+
+          if [ ! -d "$APP_DIR/.git" ]; then
+            mkdir -p "$APP_DIR"
+            git clone --branch "$BRANCH" "$REPO_URL" "$APP_DIR"
+          fi
+
+          cd "$APP_DIR"
+          git fetch origin "$BRANCH"
+          git checkout "$BRANCH"
+          git reset --hard "origin/$BRANCH"
+          echo "[remote] synced_commit=$(git rev-parse HEAD)"
+
+          chmod +x deployment/runtime-scaffold-pack/deploy.sh
+          cd deployment/runtime-scaffold-pack
+          ./deploy.sh
+          REMOTE
+
+      - name: Post-deploy live endpoint checks
+        run: |
+          set -eu
+
+          if [ -z "${BASE_URL:-}" ]; then
+            echo "BASE_URL must be saved as an Actions Variable or Secret"
+            exit 1
+          fi
+
+          BASE_URL="${BASE_URL%/}"
+          case "$BASE_URL" in
+            http://*|https://*) ;;
+            *)
+              echo "BASE_URL must include http:// or https://"
+              exit 1
+              ;;
+          esac
+
+          check_endpoint() {
+            url="$1"
+            body_file="$(mktemp)"
+            headers_file="$(mktemp)"
+            status="000"
+            if curl --max-time 20 --connect-timeout 10 --silent --show-error \
+              --dump-header "$headers_file" --output "$body_file" --write-out "%{http_code}" "$url" > "$body_file.status"; then
+              status="$(cat "$body_file.status")"
+            else
+              echo "curl_failed=true url=$url"
+            fi
+
+            echo "endpoint=$url status=$status"
+            if [ "$status" = "301" ] || [ "$status" = "302" ] || [ "$status" = "307" ] || [ "$status" = "308" ]; then
+              echo "redirect_location=$(awk 'tolower($1)==\"location:\" {print $2}' "$headers_file" | tr -d '\r' | tail -n 1)"
+            fi
+            echo "body_preview_start"
+            head -c 700 "$body_file" | tr '\n' ' '
+            echo
+            echo "body_preview_end"
+
+            case "$status" in
+              2*) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+
+          failed=0
+          for path in health ready deployment/status; do
+            if ! check_endpoint "$BASE_URL/$path"; then
+              failed=1
+            fi
+          done
+
+          if [ "$failed" -ne 0 ]; then
+            echo "BASE_URL endpoint checks failed. Probing direct droplet HTTP for routing diagnostics."
+            for path in health ready deployment/status; do
+              curl -i --max-time 15 "http://${DIGITALOCEAN_HOST}/${path}" || true
+            done
+            exit 1
+          fi
