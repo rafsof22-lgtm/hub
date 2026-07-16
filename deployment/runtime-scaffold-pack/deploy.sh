@@ -78,6 +78,10 @@ for container in xrp_hbar_apex_caddy xrp_hbar_apex_app xrp_hbar_apex_postgres xr
   fi
 done
 
+echo "[deploy] removing stale runtime-scaffold-pack containers if present"
+docker ps -a --format '{{.Names}}' | grep '^runtime-scaffold-pack-' | xargs -r docker rm -f >/dev/null 2>&1 || true
+docker network rm runtime-scaffold-pack_default >/dev/null 2>&1 || true
+
 echo "[deploy] pulling latest images"
 $COMPOSE_CMD --env-file .env.production -f docker-compose.prod.yml pull || true
 
