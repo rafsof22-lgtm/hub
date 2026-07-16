@@ -78,7 +78,8 @@ jobs:
           PY
 
           chmod 600 .deploy_ssh_key
-          ssh-keygen -y -f .deploy_ssh_key > /dev/null
+          ssh-keygen -y -f .deploy_ssh_key > .deploy_ssh_key.pub
+          echo "deploy_key_fingerprint=$(ssh-keygen -lf .deploy_ssh_key.pub | awk '{print $2, $4}')"
 
       - name: Deploy to DigitalOcean droplet over SSH
         env:
@@ -99,6 +100,8 @@ jobs:
           ssh -i .deploy_ssh_key \
             -o StrictHostKeyChecking=accept-new \
             -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o PreferredAuthentications=publickey \
             -p "$DIGITALOCEAN_PORT" \
             "$DIGITALOCEAN_USER@$DIGITALOCEAN_HOST" \
             APP_DIR="$APP_DIR" 'bash -s' <<'REMOTE'
