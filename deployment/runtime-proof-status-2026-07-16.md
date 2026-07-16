@@ -29,15 +29,16 @@ Expected deploy path: `deployment/runtime-scaffold-pack`
 - DigitalOcean API confirmed droplet `584697763` is active in `syd1` with public IPv4 `134.199.144.115`.
 - DigitalOcean account key list contains public key id `57820900`, name `github-actions-deploy-2026-07-16-active`, fingerprint `cd:d7:63:29:26:e0:75:f0:6d:49:b0:74:88:f3:2b:73`.
 - A read-only Gmail search on 2026-07-16 found an owner-controlled DigitalOcean reset email for this exact droplet. No password, token, or reset value is recorded in repo/docs/chat.
-- Earlier push-triggered workflow runs proved workflow trigger behavior.
+- No usable local private SSH key was found in this workspace for directly logging in to the droplet.
+- The exposed DigitalOcean connector can inspect droplet/account keys and perform account/droplet actions, but it does not expose a droplet shell or command runner for editing `/root/.ssh/authorized_keys`.
 - Latest rerun requested on 2026-07-16 was accepted by GitHub Actions.
-- Latest job attempt `87573996267` passed `Prepare SSH key`, deriving public key `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC0VjJjMeayv3ggrElS2vZIDlXUIXw6fER+op4UVs4DQ github-actions-deploy` with fingerprint `SHA256:EW6NvPhLbV8CxvvfGme6iSLTzyAii4AiSCQN2Cb+z6I (ED25519)`.
+- Latest job attempt `87574584632` passed `Prepare SSH key`, deriving public key `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC0VjJjMeayv3ggrElS2vZIDlXUIXw6fER+op4UVs4DQ github-actions-deploy` with fingerprint `SHA256:EW6NvPhLbV8CxvvfGme6iSLTzyAii4AiSCQN2Cb+z6I (ED25519)`.
 - Latest job attempt failed at `Deploy to DigitalOcean droplet over SSH` with `Permission denied (publickey)`.
 
 ## Latest Exercised Run
 
 - Run: `29469547563`
-- Latest job attempt: `87573996267`
+- Latest job attempt: `87574584632`
 - Checked-out commit in that rerun: `b46e969be6110e3326cf0b4236dd83cc3c93f445`
 - First failing step: `Deploy to DigitalOcean droplet over SSH`
 - Exact error: `Permission denied (publickey)`
@@ -53,9 +54,9 @@ Current first blocker remains SSH auth on the existing droplet.
 | workflow file truth | proven | restored and re-fetched on `main` in commit `4a5ed6a83de467ae944137ac43d331cc495a8364` |
 | workflow trigger/rerun truth | proven | connected GitHub tool accepted rerun request for run `29469547563` |
 | scaffold file truth | proven in latest rerun | validation passed before SSH key preparation |
-| SSH key format truth | proven now | latest job `87573996267` passed `Prepare SSH key` |
+| SSH key format truth | proven now | latest job `87574584632` passed `Prepare SSH key` |
 | DigitalOcean account-key truth | proven | account key id `57820900` matches workflow-derived public key |
-| existing-droplet key authorization truth | blocked | account-level key presence does not prove `/root/.ssh/authorized_keys`; latest run failed with `Permission denied (publickey)` |
+| host-side key placement truth | blocked/unverified | account-level key presence does not prove `/root/.ssh/authorized_keys`; latest run failed with `Permission denied (publickey)` |
 | owner recovery route truth | partial | Gmail search found reset email for this droplet; credential value remains owner-only and unrecorded |
 | SSH auth truth | blocked | latest exercised run failed before remote shell with `Permission denied (publickey)` |
 | remote repo sync truth | not reached | requires workflow reaching remote shell and printing `[remote] synced_commit=...` |
@@ -70,7 +71,7 @@ Current first blocker remains SSH auth on the existing droplet.
 
 `Deploy to DigitalOcean droplet over SSH` is the current first failing proof gate from the newest exercised run available to this agent.
 
-Exact blocker: SSH to the configured droplet user fails with `Permission denied (publickey)` even though the workflow parses the private key and derives the expected public key.
+Exact blocker: SSH to the configured droplet user fails with `Permission denied (publickey)` even though the workflow parses the private key, derives the expected public key, and that public key exists in the DigitalOcean account key list.
 
 ## Exact Next Step
 
