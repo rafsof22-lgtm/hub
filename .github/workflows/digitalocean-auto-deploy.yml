@@ -80,6 +80,7 @@ jobs:
           chmod 600 .deploy_ssh_key
           ssh-keygen -y -f .deploy_ssh_key > .deploy_ssh_key.pub
           echo "deploy_key_fingerprint=$(ssh-keygen -lf .deploy_ssh_key.pub | awk '{print $2, $4}')"
+          echo "deploy_public_key=$(cat .deploy_ssh_key.pub)"
 
       - name: Deploy to DigitalOcean droplet over SSH
         env:
