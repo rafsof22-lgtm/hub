@@ -107,13 +107,16 @@ jobs:
           GOOGLE_OAUTH_REFRESH_TOKEN: ${{ secrets.GOOGLE_OAUTH_REFRESH_TOKEN }}
           GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
           GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
+          GOOGLE_COMBINED_SECRET: ${{ secrets.Google }}
         run: |
           set -eu
           echo "deploy_target=${DIGITALOCEAN_USER}@${DIGITALOCEAN_HOST}:${DIGITALOCEAN_PORT} app_dir=${APP_DIR}"
 
           runtime_env_payload="$(mktemp)"
           python3 - "$runtime_env_payload" <<'PY'
+          import json
           import os
+          import shlex
           import sys
           from pathlib import Path
 
@@ -138,18 +141,114 @@ jobs:
               ],
           }
 
+          google_fallback_keys = {
+              "GMAIL_OAUTH_CLIENT_ID": {
+                  "GMAIL_OAUTH_CLIENT_ID",
+                  "GOOGLE_OAUTH_CLIENT_ID",
+                  "GOOGLE_CLIENT_ID",
+                  "GMAIL_CLIENT_ID",
+                  "CLIENT_ID",
+                  "OAUTH_CLIENT_ID",
+              },
+              "GMAIL_OAUTH_CLIENT_SECRET": {
+                  "GMAIL_OAUTH_CLIENT_SECRET",
+                  "GOOGLE_OAUTH_CLIENT_SECRET",
+                  "GOOGLE_CLIENT_SECRET",
+                  "GMAIL_CLIENT_SECRET",
+                  "CLIENT_SECRET",
+                  "OAUTH_CLIENT_SECRET",
+              },
+              "GMAIL_OAUTH_REFRESH_TOKEN": {
+                  "GMAIL_OAUTH_REFRESH_TOKEN",
+                  "GOOGLE_OAUTH_REFRESH_TOKEN",
+                  "GOOGLE_REFRESH_TOKEN",
+                  "GMAIL_REFRESH_TOKEN",
+                  "REFRESH_TOKEN",
+                  "OAUTH_REFRESH_TOKEN",
+              },
+          }
+
+          def clean_value(value):
+              if value is None:
+                  return ""
+              return str(value).strip().strip('"').strip("'")
+
+          def parse_env_text(text):
+              parsed = {}
+              for raw_line in text.splitlines():
+                  line = raw_line.strip()
+                  if not line or line.startswith("#") or "=" not in line:
+                      continue
+                  if line.startswith("export "):
+                      line = line[len("export "):].strip()
+                  key, value = line.split("=", 1)
+                  key = key.strip().upper()
+                  value = value.strip()
+                  try:
+                      parts = shlex.split(value, posix=True)
+                      if len(parts) == 1:
+                          value = parts[0]
+                  except ValueError:
+                      value = value.strip('"').strip("'")
+                  parsed[key] = clean_value(value)
+              return parsed
+
+          def flatten_json(value):
+              flattened = []
+              if isinstance(value, dict):
+                  for key, child in value.items():
+                      if isinstance(child, (dict, list)):
+                          flattened.extend(flatten_json(child))
+                      else:
+                          flattened.append((str(key).upper(), clean_value(child)))
+              elif isinstance(value, list):
+                  for child in value:
+                      flattened.extend(flatten_json(child))
+              return flattened
+
+          def parse_google_combined_secret(raw):
+              raw = raw.strip().lstrip("\ufeff")
+              raw = raw.replace("\r\n", "\n").replace("\r", "\n")
+              raw = raw.replace("\\r\\n", "\n").replace("\\n", "\n")
+              if not raw:
+                  return {}
+
+              source_pairs = []
+              try:
+                  payload = json.loads(raw)
+              except json.JSONDecodeError:
+                  payload = None
+              if payload is not None:
+                  source_pairs.extend(flatten_json(payload))
+              source_pairs.extend(parse_env_text(raw).items())
+
+              fallback = {}
+              for target, candidate_keys in google_fallback_keys.items():
+                  for key, value in source_pairs:
+                      if key in candidate_keys and value:
+                          fallback[target] = value
+                          break
+              return fallback
+
+          google_fallback = parse_google_combined_secret(os.environ.get("GOOGLE_COMBINED_SECRET", ""))
+
           lines = []
           populated = []
           for target, names in aliases.items():
+              selected = ""
               for name in names:
                   value = os.environ.get(name, "").strip()
                   if value:
-                      lines.append(f"{target}={value}\n")
-                      populated.append(target)
+                      selected = value
                       break
+              if not selected:
+                  selected = google_fallback.get(target, "")
+              if selected:
+                  lines.append(f"{target}={selected}\n")
+                  populated.append(target)
 
           Path(sys.argv[1]).write_text("".join(lines))
-          checked = ",".join(sorted({name for names in aliases.values() for name in names}))
+          checked = ",".join(sorted({name for names in aliases.values() for name in names} | {"Google"}))
           print(f"gmail_secret_alias_names_checked={checked}")
           print(f"gmail_secret_targets_populated_count={len(populated)}")
           PY
