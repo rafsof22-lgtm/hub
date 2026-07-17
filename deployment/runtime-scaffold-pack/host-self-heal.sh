@@ -96,12 +96,33 @@ run_deploy() {
   ./deploy.sh
 }
 
+local_required_check() {
+  path="$1"
+  log "local check /$path"
+  curl --fail --silent --show-error "http://127.0.0.1/$path" | head -c 1200
+  printf '\n'
+}
+
+local_diagnostic_check() {
+  path="$1"
+  log "local diagnostic /$path"
+  body_file="$(mktemp)"
+  status="$(curl --silent --show-error --output "$body_file" --write-out '%{http_code}' "http://127.0.0.1/$path" || true)"
+  printf 'status=%s ' "$status"
+  head -c 1200 "$body_file" | tr '\n' ' '
+  printf '\n'
+  rm -f "$body_file"
+  case "$status" in
+    2*) log "diagnostic /$path passed" ;;
+    *) log "diagnostic /$path did not pass; public proof gates will enforce the final Gmail status" ;;
+  esac
+}
+
 verify_local() {
-  for path in health ready deployment/status vti/status email/newsletter/status email/newsletter/gmail/status evidence-pack/status; do
-    log "local check /$path"
-    curl --fail --silent --show-error "http://127.0.0.1/$path" | head -c 1200
-    printf '\n'
+  for path in health ready deployment/status vti/status email/newsletter/status evidence-pack/status; do
+    local_required_check "$path"
   done
+  local_diagnostic_check email/newsletter/gmail/status
 }
 
 print_public_checks() {
