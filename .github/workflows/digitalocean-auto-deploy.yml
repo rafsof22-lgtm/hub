@@ -440,6 +440,7 @@ jobs:
           }
 
           echo "CORE_DEPLOY_PROOF=START"
+          echo "PUBLIC_ROUTE_PROOF=START"
           for path in \
             health \
             ready \
@@ -472,10 +473,12 @@ jobs:
           if ! post_json "$BASE_URL/ops/dedupe-retry-backfill/checkpoint" "$ops_payload"; then core_failed=1; fi
 
           if [ "$core_failed" -ne 0 ]; then
+            echo "PUBLIC_ROUTE_PROOF=FAIL"
             echo "CORE_DEPLOY_PROOF=FAIL"
             echo "One or more non-Gmail public proof gates failed"
             exit 1
           fi
+          echo "PUBLIC_ROUTE_PROOF=PASS"
           echo "CORE_DEPLOY_PROOF=PASS"
 
           if gmail_oauth_proof_check "$BASE_URL/email/newsletter/gmail/status"; then
