@@ -1,12 +1,12 @@
 # Deployment Secret Placement Map
 
-Last updated: 2026-07-16
+Last updated: 2026-07-17
 
 ## Safety Rule
 
 Secrets must not be committed to this repository and must not be copied into issues, comments, docs, or chat.
 
-Public SSH keys and fingerprints are safe to record for verification. Private key blocks, passwords, reset tokens, and one-time credentials are never safe to record.
+Public SSH keys and fingerprints are safe to record for verification. Private key blocks, passwords, reset tokens, OAuth client secrets, refresh tokens, API keys, bearer tokens, and one-time credentials are never safe to record.
 
 ## GitHub Actions Secrets And Variables
 
@@ -32,11 +32,11 @@ Latest exercised Actions proof available to this agent:
 
 DigitalOcean account key inventory contains the same public key as key id `57820900`, name `github-actions-deploy-2026-07-16-active`, fingerprint `cd:d7:63:29:26:e0:75:f0:6d:49:b0:74:88:f3:2b:73`.
 
-Current first blocker is existing-droplet SSH authorization, not secret format.
+Historical blocker note: that SSH authorization failure is superseded by later successful deploy proof. Recheck the latest Actions run before treating SSH as the current blocker.
 
 ## Host-Side Authorization Fix
 
-Make sure this public key is present for the configured user:
+Make sure this public key is present for the configured user if SSH authorization regresses:
 
 ```text
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC0VjJjMeayv3ggrElS2vZIDlXUIXw6fER+op4UVs4DQ github-actions-deploy
@@ -65,9 +65,32 @@ These values belong on the host at:
 | `POSTGRES_URL` | yes | application database connection |
 | `REDIS_URL` | no/low | Redis connection |
 | `XRP_HBAR_APEX_BASE_URL` | no | module base URL |
-| `OPENAI_API_KEY` | yes | future model-backed routes, not current basic health |
+| `OPENAI_API_KEY` | yes | model-backed routes; optional for current basic health |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | yes | future Google workflows |
 | `N8N_WEBHOOK_SECRET` | yes | future n8n webhooks |
+| `GMAIL_OAUTH_CLIENT_ID` | low/yes | Gmail runtime token refresh; keep host-only with the paired secret/refresh token |
+| `GMAIL_OAUTH_CLIENT_SECRET` | yes | Gmail runtime token refresh |
+| `GMAIL_OAUTH_REFRESH_TOKEN` | yes | Gmail runtime token refresh |
+
+## Future Hybrid LLM Router Values
+
+These are future-only until a router module and provider health checks exist. Do not add real values to repo docs, issues, comments, logs, or chat.
+
+| item | belongs in | secret? | required now? | verification without exposing value |
+|---|---|---:|---:|---|
+| `OPENROUTER_API_KEY` | host runtime secret store or GitHub Actions Secret if CI needs provider checks | yes | no | narrow provider health/auth check returns success without printing key |
+| `DEEPSEEK_API_KEY` | host runtime secret store or GitHub Actions Secret if CI needs provider checks | yes | no | narrow provider health/auth check returns success without printing key |
+| `KIMI_API_KEY` | host runtime secret store or GitHub Actions Secret if CI needs provider checks | yes | no | narrow provider health/auth check returns success without printing key |
+| `QWEN_API_KEY` | host runtime secret store or GitHub Actions Secret if CI needs provider checks | yes | no | narrow provider health/auth check returns success without printing key |
+| `LITELLM_MASTER_KEY` | host runtime secret store | yes | no | LiteLLM health/auth check passes without logging key |
+| `LLM_ROUTER_MODE` | host runtime variable | no | no | router status reports dry-run/live mode |
+| `LLM_ROUTER_DEFAULT_MODEL` | host runtime variable | no | no | dry-run route selection reports expected default |
+| `LLM_ROUTER_CODING_MODEL` | host runtime variable | no | no | dry-run coding task selects expected worker |
+| `LLM_ROUTER_RESEARCH_MODEL` | host runtime variable | no | no | dry-run research task selects expected worker |
+| `LLM_ROUTER_CLASSIFICATION_MODEL` | host runtime variable | no | no | dry-run classification task selects expected worker |
+| `LOCAL_LLM_BASE_URL` | host runtime variable | no/low | no | local worker health endpoint responds |
+| `OCR_VISION_ENDPOINT` | host runtime variable or secret depending on provider | depends | no | OCR/vision health check responds without secret leakage |
+| `EMBEDDING_MODEL` | host runtime variable | no | no | embedding route dry-run selects expected model |
 
 ## Verification Without Exposing Secrets
 
@@ -75,4 +98,6 @@ These values belong on the host at:
 - SSH auth: workflow step `Deploy to DigitalOcean droplet over SSH` reaches remote commands and prints `[remote] synced_commit=...`.
 - `.env.production`: `deploy.sh` does not fail with missing value or placeholder messages.
 - Postgres/Redis: `/ready` returns success locally and publicly.
-- `BASE_URL`: post-deploy endpoint checks pass against all three public routes.
+- `BASE_URL`: post-deploy endpoint checks pass against required public routes.
+- Gmail runtime credentials: `/email/newsletter/gmail/status` reports token-refresh-proven readiness; then a bounded read-only Gmail fetch succeeds.
+- Hybrid router credentials: future router health endpoints prove configured providers without logging secret values.
