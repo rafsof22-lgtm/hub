@@ -1,4 +1,4 @@
-triggered_at_utc=2026-07-17T08:58:30Z
-reason=prove-current-main-gmail-and-public-route-recovery
-proof_gate=ssh-deploy,host-env-sync,health,ready,deployment-status,gmail-status,gmail-fetch,gmail-proof-latest
+triggered_at_utc=2026-07-17T09:51:00Z
+reason=prove-separated-core-deploy-and-gmail-oauth-proof-gates
+proof_gate=core-deploy-proof,gmail-oauth-proof-invalid-grant-diagnostic
 no_secret_values=true
