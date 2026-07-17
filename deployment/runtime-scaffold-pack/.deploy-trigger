@@ -1,4 +1,5 @@
-triggered_at_utc=2026-07-17T09:51:00Z
-reason=prove-separated-core-deploy-and-gmail-oauth-proof-gates
-proof_gate=core-deploy-proof,gmail-oauth-proof-invalid-grant-diagnostic
+triggered_at_utc=2026-07-17T09:52:30Z
+reason=prove-batched-core-public-route-and-gmail-oauth-proof-gates
+proof_gate=core-deploy-proof,public-route-proof,gmail-oauth-proof-invalid-grant-diagnostic
+batched_remediation_commit=97f91275e8a65ceb809e18c17f11e2371f0c9b7e
 no_secret_values=true
