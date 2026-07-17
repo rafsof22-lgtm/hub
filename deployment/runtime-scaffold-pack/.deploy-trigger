@@ -1,5 +1,6 @@
-triggered_at_utc=2026-07-17T09:52:30Z
-reason=prove-batched-core-public-route-and-gmail-oauth-proof-gates
-proof_gate=core-deploy-proof,public-route-proof,gmail-oauth-proof-invalid-grant-diagnostic
-batched_remediation_commit=97f91275e8a65ceb809e18c17f11e2371f0c9b7e
+triggered_at_utc=2026-07-17T10:42:00Z
+reason=prove-non-gmail-runtime-gates-with-gmail-status-only
+proof_gate=core-deploy-proof,public-route-proof,vti-proof,newsletter-manual-proof,sync-claim-evidence-ops-proof
+gmail_gate=status-only-blocked-manual-secret-action-required
+status_note_commit=4e29771da9fc5a5a08280e29633a472c9d40a622
 no_secret_values=true
