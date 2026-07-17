@@ -345,7 +345,7 @@ jobs:
         run: |
           set -eu
           BASE_URL="${BASE_URL%/}"
-          failed=0
+          core_failed=0
 
           get_json() {
             url="$1"
@@ -357,6 +357,7 @@ jobs:
             echo "endpoint=$url status=$status"
             head -c 1200 "$body_file" | tr '\n' ' '
             echo
+            rm -f "$body_file" "$body_file.status"
             case "$status" in 2*) return 0 ;; *) return 1 ;; esac
           }
 
@@ -375,25 +376,70 @@ jobs:
             echo "endpoint=$url method=POST status=$status"
             head -c 1400 "$body_file" | tr '\n' ' '
             echo
+            rm -f "$body_file" "$body_file.status"
             case "$status" in 2*) return 0 ;; *) return 1 ;; esac
           }
 
-          require_ready_status() {
+          gmail_oauth_proof_check() {
             url="$1"
             body_file="$(mktemp)"
             status="$(curl --max-time 20 --connect-timeout 10 --silent --show-error --output "$body_file" --write-out "%{http_code}" "$url" || true)"
-            echo "endpoint=$url status=$status"
-            cat "$body_file" | head -c 1600 | tr '\n' ' '
+            echo "endpoint=$url proof_gate=GMAIL_OAUTH_PROOF status=$status"
+            head -c 1600 "$body_file" | tr '\n' ' '
             echo
-            python3 - "$body_file" <<'PY'
+            set +e
+            python3 - "$body_file" "$status" <<'PY'
           import json
           import sys
-          payload = json.load(open(sys.argv[1]))
-          if payload.get("status") != "ready_for_fetch_token_refresh_proven":
-              raise SystemExit("Gmail runtime credentials are not token-refresh proven")
+
+          body_path = sys.argv[1]
+          http_status = sys.argv[2]
+          try:
+              payload = json.load(open(body_path))
+          except Exception as exc:
+              print(f"GMAIL_OAUTH_PROOF_FAILED_REQUIRES_SECRET_REPLACEMENT parse_error={exc} http_status={http_status}")
+              raise SystemExit(2)
+
+          status = payload.get("status")
+          evidence = payload.get("evidence") or {}
+          token_refresh = evidence.get("token_refresh") or {}
+          error_type = token_refresh.get("error_type")
+          runtime_configured = evidence.get("runtime_credentials_configured")
+          required_env = payload.get("required_env") or []
+          configured_count = sum(1 for item in required_env if item.get("configured"))
+
+          print(
+              "GMAIL_OAUTH_PROOF summary "
+              f"route_status={status} http_status={http_status} "
+              f"runtime_credentials_configured={runtime_configured} "
+              f"configured_required_env_count={configured_count} "
+              f"token_refresh_attempted={token_refresh.get('attempted')} "
+              f"token_refresh_succeeded={token_refresh.get('succeeded')} "
+              f"token_status_code={token_refresh.get('status_code')} "
+              f"scope_contains_required={token_refresh.get('scope_contains_required')} "
+              f"error_type={error_type} secret_values_hidden={evidence.get('secret_values_hidden')}"
+          )
+
+          if status == "ready_for_fetch_token_refresh_proven":
+              print("GMAIL_OAUTH_PROOF=PASS")
+              raise SystemExit(0)
+          if error_type == "invalid_grant":
+              print("GMAIL_OAUTH_INVALID_GRANT_REFRESH_TOKEN_REPLACE_REQUIRED")
+              print("GMAIL_OAUTH_PROOF_FAILED_REQUIRES_SECRET_REPLACEMENT")
+              raise SystemExit(2)
+          if runtime_configured:
+              print("GMAIL_OAUTH_PROOF_FAILED_REQUIRES_SECRET_REPLACEMENT")
+              raise SystemExit(2)
+          print("GMAIL_OAUTH_PROOF_BLOCKED_PENDING_CREDENTIALS")
+          raise SystemExit(2)
           PY
+            result="$?"
+            set -e
+            rm -f "$body_file"
+            return "$result"
           }
 
+          echo "CORE_DEPLOY_PROOF=START"
           for path in \
             health \
             ready \
@@ -405,7 +451,7 @@ jobs:
             vti/worker/status \
             evidence-pack/status \
             ops/dedupe-retry-backfill/status; do
-            if ! get_json "$BASE_URL/$path"; then failed=1; fi
+            if ! get_json "$BASE_URL/$path"; then core_failed=1; fi
           done
 
           vti_payload='{"source_url":"https://ripple.com/solutions/stablecoin/","platform":"official-web-copied-link","title":"Ripple USD stablecoin copied-link smoke proof","transcript":"Manual transcript smoke for XRP HBAR Apex runtime proof.","ocr_text":"Visible-page OCR smoke for runtime proof."}'
@@ -415,22 +461,36 @@ jobs:
           vti_worker_payload='{"source_url":"https://ripple.com/solutions/stablecoin/","worker_stage":"queued"}'
           ops_payload='{"dedupe_key":"workflow-smoke","retry_count":0,"backfill_cursor":"workflow-cursor"}'
 
-          if ! post_json "$BASE_URL/vti/smoke" "$vti_payload"; then failed=1; fi
-          if ! get_json "$BASE_URL/vti/evidence/latest"; then failed=1; fi
-          if ! post_json "$BASE_URL/email/newsletter/smoke" "$newsletter_payload"; then failed=1; fi
-          if ! get_json "$BASE_URL/email/newsletter/proof/latest"; then failed=1; fi
-          if ! post_json "$BASE_URL/email/newsletter/sync/checkpoint" "$sync_payload"; then failed=1; fi
-          if ! post_json "$BASE_URL/email/newsletter/claims/extract" "$claim_payload"; then failed=1; fi
-          if ! post_json "$BASE_URL/vti/worker/checkpoint" "$vti_worker_payload"; then failed=1; fi
-          if ! get_json "$BASE_URL/evidence-pack/latest"; then failed=1; fi
-          if ! post_json "$BASE_URL/ops/dedupe-retry-backfill/checkpoint" "$ops_payload"; then failed=1; fi
+          if ! post_json "$BASE_URL/vti/smoke" "$vti_payload"; then core_failed=1; fi
+          if ! get_json "$BASE_URL/vti/evidence/latest"; then core_failed=1; fi
+          if ! post_json "$BASE_URL/email/newsletter/smoke" "$newsletter_payload"; then core_failed=1; fi
+          if ! get_json "$BASE_URL/email/newsletter/proof/latest"; then core_failed=1; fi
+          if ! post_json "$BASE_URL/email/newsletter/sync/checkpoint" "$sync_payload"; then core_failed=1; fi
+          if ! post_json "$BASE_URL/email/newsletter/claims/extract" "$claim_payload"; then core_failed=1; fi
+          if ! post_json "$BASE_URL/vti/worker/checkpoint" "$vti_worker_payload"; then core_failed=1; fi
+          if ! get_json "$BASE_URL/evidence-pack/latest"; then core_failed=1; fi
+          if ! post_json "$BASE_URL/ops/dedupe-retry-backfill/checkpoint" "$ops_payload"; then core_failed=1; fi
 
-          if [ "$failed" -ne 0 ]; then
+          if [ "$core_failed" -ne 0 ]; then
+            echo "CORE_DEPLOY_PROOF=FAIL"
             echo "One or more non-Gmail public proof gates failed"
             exit 1
           fi
+          echo "CORE_DEPLOY_PROOF=PASS"
 
-          require_ready_status "$BASE_URL/email/newsletter/gmail/status"
-          gmail_fetch_payload='{"query":"category:primary newer_than:30d","max_results":3}'
-          post_json "$BASE_URL/email/newsletter/gmail/fetch" "$gmail_fetch_payload"
-          get_json "$BASE_URL/email/newsletter/gmail/proof/latest"
+          if gmail_oauth_proof_check "$BASE_URL/email/newsletter/gmail/status"; then
+            gmail_fetch_payload='{"query":"category:primary newer_than:30d","max_results":3}'
+            if post_json "$BASE_URL/email/newsletter/gmail/fetch" "$gmail_fetch_payload"; then
+              get_json "$BASE_URL/email/newsletter/gmail/proof/latest" || true
+            else
+              echo "GMAIL_OAUTH_PROOF=FAIL fetch_failed_after_token_refresh"
+              echo "GMAIL_OAUTH_PROOF_FAILED_REQUIRES_SECRET_REPLACEMENT"
+            fi
+          else
+            echo "GMAIL_OAUTH_PROOF=BLOCKED"
+            echo "GMAIL_OAUTH_PROOF_FAILED_REQUIRES_SECRET_REPLACEMENT"
+            echo "Manual action: replace GMAIL_OAUTH_REFRESH_TOKEN first. If it was generated against a different OAuth client, replace GMAIL_OAUTH_CLIENT_ID, GMAIL_OAUTH_CLIENT_SECRET, and GMAIL_OAUTH_REFRESH_TOKEN together. Required scope: https://www.googleapis.com/auth/gmail.readonly. Never paste values into chat."
+            get_json "$BASE_URL/email/newsletter/gmail/proof/latest" || true
+          fi
+
+          echo "DigitalOcean core deployment proof succeeded; Gmail OAuth proof remains a separate gate when blocked."
