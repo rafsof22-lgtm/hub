@@ -94,9 +94,76 @@ jobs:
           echo "deploy_key_fingerprint=$(ssh-keygen -lf .deploy_ssh_key.pub | awk '{print $2, $4}')"
 
       - name: Deploy to DigitalOcean droplet over SSH
+        env:
+          GMAIL_OAUTH_CLIENT_ID: ${{ secrets.GMAIL_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
+          GMAIL_OAUTH_CLIENT_SECRET: ${{ secrets.GMAIL_OAUTH_CLIENT_SECRET }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
+          GMAIL_OAUTH_REFRESH_TOKEN: ${{ secrets.GMAIL_OAUTH_REFRESH_TOKEN }}
+          GOOGLE_OAUTH_REFRESH_TOKEN: ${{ secrets.GOOGLE_OAUTH_REFRESH_TOKEN }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
         run: |
           set -eu
           echo "deploy_target=${DIGITALOCEAN_USER}@${DIGITALOCEAN_HOST}:${DIGITALOCEAN_PORT} app_dir=${APP_DIR}"
+
+          runtime_env_payload="$(mktemp)"
+          python3 - "$runtime_env_payload" <<'PY'
+          import os
+          import sys
+          from pathlib import Path
+
+          aliases = {
+              "GMAIL_OAUTH_CLIENT_ID": [
+                  "GMAIL_OAUTH_CLIENT_ID",
+                  "GOOGLE_OAUTH_CLIENT_ID",
+                  "GOOGLE_CLIENT_ID",
+                  "GMAIL_CLIENT_ID",
+              ],
+              "GMAIL_OAUTH_CLIENT_SECRET": [
+                  "GMAIL_OAUTH_CLIENT_SECRET",
+                  "GOOGLE_OAUTH_CLIENT_SECRET",
+                  "GOOGLE_CLIENT_SECRET",
+                  "GMAIL_CLIENT_SECRET",
+              ],
+              "GMAIL_OAUTH_REFRESH_TOKEN": [
+                  "GMAIL_OAUTH_REFRESH_TOKEN",
+                  "GOOGLE_OAUTH_REFRESH_TOKEN",
+                  "GOOGLE_REFRESH_TOKEN",
+                  "GMAIL_REFRESH_TOKEN",
+              ],
+          }
+
+          lines = []
+          populated = []
+          for target, names in aliases.items():
+              for name in names:
+                  value = os.environ.get(name, "").strip()
+                  if value:
+                      lines.append(f"{target}={value}\n")
+                      populated.append(target)
+                      break
+
+          Path(sys.argv[1]).write_text("".join(lines))
+          checked = ",".join(sorted({name for names in aliases.values() for name in names}))
+          print(f"gmail_secret_alias_names_checked={checked}")
+          print(f"gmail_secret_targets_populated_count={len(populated)}")
+          PY
+
+          upload_path="/tmp/xrp_hbar_runtime_env_${GITHUB_RUN_ID:-manual}_${GITHUB_RUN_ATTEMPT:-0}"
+          scp -i .deploy_ssh_key \
+            -o StrictHostKeyChecking=accept-new \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o PreferredAuthentications=publickey \
+            -P "$DIGITALOCEAN_PORT" \
+            "$runtime_env_payload" \
+            "$DIGITALOCEAN_USER@$DIGITALOCEAN_HOST:$upload_path"
+          rm -f "$runtime_env_payload"
 
           ssh -i .deploy_ssh_key \
             -o StrictHostKeyChecking=accept-new \
@@ -105,7 +172,7 @@ jobs:
             -o PreferredAuthentications=publickey \
             -p "$DIGITALOCEAN_PORT" \
             "$DIGITALOCEAN_USER@$DIGITALOCEAN_HOST" \
-            APP_DIR="$APP_DIR" 'bash -s' <<'REMOTE'
+            APP_DIR="$APP_DIR" RUNTIME_ENV_UPLOAD="$upload_path" 'bash -s' <<'REMOTE'
           set -eu
 
           REPO_URL="https://github.com/rafsof22-lgtm/hub.git"
@@ -121,6 +188,55 @@ jobs:
           git checkout "$BRANCH"
           git reset --hard "origin/$BRANCH"
           echo "[remote] synced_commit=$(git rev-parse HEAD)"
+
+          if [ -n "${RUNTIME_ENV_UPLOAD:-}" ] && [ -s "$RUNTIME_ENV_UPLOAD" ]; then
+            env_file="$APP_DIR/deployment/runtime-scaffold-pack/.env.production"
+            mkdir -p "$(dirname "$env_file")"
+            touch "$env_file"
+            chmod 600 "$env_file" || true
+            python3 - "$env_file" "$RUNTIME_ENV_UPLOAD" <<'PY'
+          import sys
+          from pathlib import Path
+
+          env_path = Path(sys.argv[1])
+          upload_path = Path(sys.argv[2])
+          managed_keys = {
+              "GMAIL_OAUTH_CLIENT_ID",
+              "GMAIL_OAUTH_CLIENT_SECRET",
+              "GMAIL_OAUTH_REFRESH_TOKEN",
+          }
+
+          existing = []
+          if env_path.exists():
+              existing = env_path.read_text().splitlines()
+
+          incoming = {}
+          for line in upload_path.read_text().splitlines():
+              if not line.strip() or line.lstrip().startswith("#") or "=" not in line:
+                  continue
+              key, value = line.split("=", 1)
+              key = key.strip()
+              if key in managed_keys and value.strip():
+                  incoming[key] = value.strip()
+
+          kept = []
+          for line in existing:
+              key = line.split("=", 1)[0].strip() if "=" in line else ""
+              if key in incoming:
+                  continue
+              kept.append(line)
+
+          for key in sorted(incoming):
+              kept.append(f"{key}={incoming[key]}")
+
+          env_path.write_text("\n".join(kept).rstrip() + "\n")
+          PY
+            rm -f "$RUNTIME_ENV_UPLOAD"
+            echo "[remote] gmail_runtime_env_alias_import=attempted"
+          else
+            rm -f "${RUNTIME_ENV_UPLOAD:-}" 2>/dev/null || true
+            echo "[remote] gmail_runtime_env_alias_import=no_candidate_values"
+          fi
 
           chmod +x deployment/runtime-scaffold-pack/host-self-heal.sh
           APP_DIR="$APP_DIR" REPO_URL="$REPO_URL" BRANCH="$BRANCH" deployment/runtime-scaffold-pack/host-self-heal.sh
