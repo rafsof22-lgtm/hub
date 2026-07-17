@@ -1,3 +1,4 @@
-triggered_at_utc=2026-07-17T02:28:30Z
-reason=prove-current-digitalocean-auto-deploy-gmail-alias-mapping
+triggered_at_utc=2026-07-17T02:46:30Z
+reason=prove-current-main-gmail-proof-gate
+proof_gate=ssh-deploy,host-env-sync,health,ready,deployment-status,gmail-status,gmail-fetch,gmail-proof-latest
 no_secret_values=true
