@@ -27,6 +27,16 @@ Do not claim the full Jarvis/XRP-HBAR runtime is production complete until:
 - A bounded Gmail fetch succeeds without exposing credential values.
 - The first remaining VTI/email proof gates in `deployment/runtime-autopush-backlog.md` are updated with run-level evidence.
 
+## Gmail OAuth invalid-grant recovery
+
+If `/email/newsletter/gmail/status` reports `error_type: invalid_grant` after all three Gmail env names are configured, the remaining blocker is credential validity, not missing env names.
+
+Manual action required: replace `GMAIL_OAUTH_REFRESH_TOKEN` first in GitHub Actions secrets. If the refresh token was generated against a different OAuth client, replace all three secrets together: `GMAIL_OAUTH_CLIENT_ID`, `GMAIL_OAUTH_CLIENT_SECRET`, and `GMAIL_OAUTH_REFRESH_TOKEN`.
+
+Required OAuth scope: `https://www.googleapis.com/auth/gmail.readonly`.
+
+Never paste OAuth client secrets or refresh tokens into chat, issues, commits, logs, or docs. Store them only in the approved GitHub Actions secret path or runtime secret store.
+
 ## Hybrid router status
 
 The hybrid LLM router is architecture/backlog only. It does not replace ChatGPT Agent Builder's core model, does not configure provider secrets, and is not required for the current VTI/email deployment path.
