@@ -2,9 +2,9 @@
 
 Current blocker: Gmail runtime proof is not complete. The last connector-visible deploy proof reached the main host, synced commit `1b451c51e3f85510203370fe56fac1d9673a884c`, started the Docker/Caddy runtime, and returned HTTP 200 for core public scaffold, VTI smoke, newsletter smoke, evidence-pack, and checkpoint routes from the GitHub Actions runner. That run failed at `/email/newsletter/gmail/status` because the live runtime reported the canonical Gmail env vars were not configured.
 
-Current `main` is `5aaf80900e47ed3f740eab85ea1a24b404f0fc63`, one commit ahead of the last deployed commit. The only code change is `.github/workflows/digitalocean-auto-deploy.yml`, which maps supported Gmail/Google GitHub Actions secret aliases into canonical host env names without printing values. A fresh `DigitalOcean Auto Deploy` workflow run on `main` is required to test that alias-mapping logic.
+Deploy-relevant workflow head is `5aaf80900e47ed3f740eab85ea1a24b404f0fc63`, one deploy-relevant commit ahead of the last deployed commit. That workflow change maps supported Gmail/Google GitHub Actions secret aliases into canonical host env names without printing values. Current `main` may also include later docs-only commits; those should not trigger deploy because the workflow ignores Markdown-only path changes. A fresh `DigitalOcean Auto Deploy` workflow run on `main` is required to test the alias-mapping logic.
 
-Use this runbook after checking the latest GitHub Actions run for the current `main` commit.
+Use this runbook after checking the latest GitHub Actions run for current `main`.
 
 ## Decision Tree
 
