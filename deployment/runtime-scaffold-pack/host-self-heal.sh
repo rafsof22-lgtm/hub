@@ -56,14 +56,27 @@ ensure_env() {
     fi
   done
 
-  if grep -Eq 'YOUR-|change-me|change_me|example\.com|your-client-secret|your-refresh-token' .env.production; then
-    log ".env.production still contains placeholder values"
+  if grep -Eq 'YOUR-|change-me|change_me|example\.com' .env.production; then
+    log ".env.production still contains core placeholder values"
     missing=1
   fi
 
   if [ "$missing" -ne 0 ]; then
-    log "edit $RUNTIME_DIR/.env.production with real values, then rerun this script"
+    log "edit $RUNTIME_DIR/.env.production with real core runtime values, then rerun this script"
     exit 2
+  fi
+
+  gmail_pending=0
+  for name in GMAIL_OAUTH_CLIENT_ID GMAIL_OAUTH_CLIENT_SECRET GMAIL_OAUTH_REFRESH_TOKEN; do
+    value="$(grep -E "^${name}=" .env.production | tail -n 1 | cut -d= -f2- || true)"
+    case "$value" in
+      ""|your-client-id.apps.googleusercontent.com|your-client-secret|your-refresh-token)
+        gmail_pending=1
+        ;;
+    esac
+  done
+  if [ "$gmail_pending" -ne 0 ]; then
+    log "Gmail runtime credentials are still pending; route repair can continue, but Gmail proof will remain blocked"
   fi
 }
 
@@ -84,7 +97,7 @@ run_deploy() {
 }
 
 verify_local() {
-  for path in health ready deployment/status vti/status email/newsletter/status evidence-pack/status; do
+  for path in health ready deployment/status vti/status email/newsletter/status email/newsletter/gmail/status evidence-pack/status; do
     log "local check /$path"
     curl --fail --silent --show-error "http://127.0.0.1/$path" | head -c 1200
     printf '\n'
