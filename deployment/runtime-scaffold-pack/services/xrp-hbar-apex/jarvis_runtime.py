@@ -4,7 +4,7 @@ import os
 from typing import Any
 
 from app import app
-from federation.jarvis_contract import build_contract, validate_contract
+from jarvis_contract import build_contract, validate_contract
 
 
 def _route_state() -> dict[str, str]:
