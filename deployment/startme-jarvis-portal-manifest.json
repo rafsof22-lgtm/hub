@@ -1,0 +1,149 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-07-19",
+  "status": "SPECIFIED_NOT_PROVISIONED",
+  "purpose": "Human-facing Jarvis command portal and curated launch surface",
+  "truth_boundaries": {
+    "system_of_record": false,
+    "secret_store": false,
+    "autonomous_backend": false,
+    "approved_uses": [
+      "bookmarks",
+      "RSS monitoring",
+      "status links",
+      "runbook links",
+      "search shortcuts",
+      "operator notes",
+      "task visibility",
+      "team portal"
+    ]
+  },
+  "recommended_plan": {
+    "initial": "PRO",
+    "team_upgrade_trigger": "More than one regular operator or need for shared editable pages, custom subdomain, permissions, or SSO",
+    "enterprise_trigger": "Multiple departments, unlimited teams/members, centralized controls, analytics, or enterprise SSO governance"
+  },
+  "pages": [
+    {
+      "id": "jarvis-command-centre",
+      "title": "Jarvis Command Centre",
+      "visibility": "private",
+      "columns": 5,
+      "widgets": [
+        {"type": "bookmarks", "title": "Core Runtime", "items": ["/health", "/ready", "/deployment/status", "/federation/contract"]},
+        {"type": "bookmarks", "title": "Evidence", "items": ["/vti/status", "/vti/evidence/latest", "/email/newsletter/status", "/evidence-pack/latest"]},
+        {"type": "bookmarks", "title": "Operations", "items": ["GitHub repository", "Open pull requests", "Actions runs", "DigitalOcean console", "Incident runbook"]},
+        {"type": "notes", "title": "Current State", "content_policy": "No secrets, tokens, personal data, seed phrases, or sensitive operational details"},
+        {"type": "todo", "title": "Approval Queue"}
+      ]
+    },
+    {
+      "id": "xrp-hbar-intelligence",
+      "title": "XRP & HBAR Intelligence",
+      "visibility": "private",
+      "columns": 6,
+      "widgets": [
+        {"type": "rss", "title": "Official XRP/Ripple", "feed_classes": ["Ripple newsroom", "Ripple insights", "XRPL Foundation", "XRPL amendments"]},
+        {"type": "rss", "title": "Official Hedera", "feed_classes": ["Hedera blog", "Hedera council", "HBAR Foundation"]},
+        {"type": "bookmarks", "title": "Regulatory", "items": ["SEC", "ASIC", "AUSTRAC", "ESMA", "BIS", "IMF"]},
+        {"type": "bookmarks", "title": "Market Data", "items": ["price dashboards", "on-chain explorers", "ETF and derivatives sources"]},
+        {"type": "search", "title": "Research Search", "engines": ["Google", "Bing", "site-specific official-source searches"]},
+        {"type": "notes", "title": "Evidence Rules", "content": "Official sources first. Claims remain unverified until linked to evidence and proof tier."}
+      ]
+    },
+    {
+      "id": "video-email-intelligence",
+      "title": "Video & Email Intelligence",
+      "visibility": "private",
+      "columns": 4,
+      "widgets": [
+        {"type": "bookmarks", "title": "VTI", "items": ["/vti/status", "/vti/evidence", "/vti/worker/status"]},
+        {"type": "bookmarks", "title": "Email", "items": ["/email/newsletter/status", "/email/newsletter/gmail/status", "/email/newsletter/gmail/proof/latest"]},
+        {"type": "todo", "title": "Intake Queue"},
+        {"type": "notes", "title": "Privacy Boundary", "content": "Do not place message bodies, addresses, credentials, or private source content in Start.me."}
+      ]
+    },
+    {
+      "id": "build-deploy-operations",
+      "title": "Build, Deploy & Operations",
+      "visibility": "private",
+      "columns": 5,
+      "widgets": [
+        {"type": "bookmarks", "title": "GitHub", "items": ["Repository", "PRs", "Issues", "Actions", "Security"]},
+        {"type": "bookmarks", "title": "Infrastructure", "items": ["DigitalOcean", "DNS", "monitoring", "backups"]},
+        {"type": "bookmarks", "title": "Runbooks", "items": ["deployment", "rollback", "OAuth recovery", "incident response"]},
+        {"type": "todo", "title": "Release Gates"},
+        {"type": "notes", "title": "Production Rule", "content": "No production change without tests, evidence, rollback, and approval."}
+      ]
+    },
+    {
+      "id": "source-library",
+      "title": "Source Library",
+      "visibility": "private",
+      "columns": 4,
+      "widgets": [
+        {"type": "bookmarks", "title": "Official Sources"},
+        {"type": "rss", "title": "Tracked Feeds"},
+        {"type": "bookmarks", "title": "Research Tools"},
+        {"type": "notes", "title": "Source Quality Ladder"}
+      ]
+    }
+  ],
+  "route_catalog": {
+    "core": ["GET /health", "GET /ready", "GET /deployment/status"],
+    "gmail": [
+      "GET /email/newsletter/gmail/status",
+      "POST /email/newsletter/gmail/fetch",
+      "GET /email/newsletter/gmail/proof/latest",
+      "GET /email/newsletter/gmail/proof/{proof_id}"
+    ],
+    "newsletter": [
+      "GET /email/newsletter/status",
+      "POST /email/newsletter/smoke",
+      "GET /email/newsletter/proof/latest",
+      "GET /email/newsletter/proof/{proof_id}",
+      "GET /email/newsletter/proof",
+      "GET /email/newsletter/sync/status",
+      "POST /email/newsletter/sync/checkpoint",
+      "GET /email/newsletter/claims/status",
+      "POST /email/newsletter/claims/extract"
+    ],
+    "vti": [
+      "GET /vti/status",
+      "POST /vti/smoke",
+      "GET /vti/evidence/{source_id}",
+      "GET /vti/evidence/latest",
+      "GET /vti/evidence",
+      "GET /vti/worker/status",
+      "POST /vti/worker/checkpoint"
+    ],
+    "evidence_ops": [
+      "GET /evidence-pack/status",
+      "GET /evidence-pack/latest",
+      "GET /ops/dedupe-retry-backfill/status",
+      "POST /ops/dedupe-retry-backfill/checkpoint"
+    ],
+    "planned": [
+      "GET /federation/contract",
+      "GET /portal/catalog",
+      "GET /portal/startme/export",
+      "GET /metrics",
+      "GET /version"
+    ]
+  },
+  "security": {
+    "never_store": ["passwords", "API keys", "OAuth secrets", "refresh tokens", "private keys", "seed phrases", "recovery codes", "production database credentials", "private email bodies"],
+    "public_page_policy": "No internal endpoints, infrastructure identifiers, private documents, or operational state",
+    "protected_link_policy": "Not a substitute for application authentication",
+    "backup": ["HTML bookmark export", "OPML RSS export", "versioned canonical manifest in GitHub"],
+    "review_frequency_days": 30
+  },
+  "acceptance_tests": [
+    "Every displayed runtime link resolves or is visibly marked unavailable",
+    "No secret or private data appears in any page or widget",
+    "Page ownership and edit rights follow least privilege",
+    "Bookmark and RSS exports can restore the portal inventory",
+    "Start.me content can be reconstructed from this manifest without relying on memory",
+    "Start.me is not used as the sole alerting, audit, evidence, or control system"
+  ]
+}

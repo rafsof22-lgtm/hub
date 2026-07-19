@@ -1,0 +1,30 @@
+name: Source Discovery CI
+
+on:
+  pull_request:
+    paths:
+      - 'source_discovery/**'
+      - 'tests/test_source_discovery.py'
+      - 'tests/test_source_discovery_adapters.py'
+      - '.github/workflows/source-discovery-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  safety-core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile source discovery modules
+        run: python -m compileall source_discovery tests/test_source_discovery.py tests/test_source_discovery_adapters.py
+      - name: Run safety tests
+        run: python -m unittest tests.test_source_discovery tests.test_source_discovery_adapters -v
+      - name: Verify no runtime secret files are introduced
+        run: |
+          test ! -f .env
+          test ! -f deployment/runtime-scaffold-pack/.env.production

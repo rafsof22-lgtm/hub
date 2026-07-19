@@ -8,6 +8,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py .
 COPY jarvis_contract.py .
 COPY jarvis_runtime.py .
+COPY source_discovery_runtime.py .
 
 EXPOSE 8080
 

@@ -34,6 +34,7 @@ def build_contract(
         "/vti/status",
         "/email/newsletter/status",
         "/evidence-pack/status",
+        "/source-discovery/status",
     ]
     checks = [
         {
@@ -55,16 +56,21 @@ def build_contract(
             {"id": "xrp-hbar-runtime", "version": "1.0.0", "status": "partial"},
             {"id": "market-intelligence", "version": "1.0.0", "status": "backlogged"},
             {"id": "video-email-evidence", "version": "1.0.0", "status": "partial"},
+            {"id": "governed-source-discovery", "version": "1.0.0", "status": "integrated_staging"},
         ],
         "deployment": {"provider": "digitalocean", "url": deployment_url, "status": "DEPLOYED_UNVERIFIED" if deployment_url else "IMPLEMENTED_NOT_INTEGRATED"},
         "approval_state": "not_required",
         "status": "IMPLEMENTED_NOT_INTEGRATED",
         "blockers": [
-            "Canonical Flask route binding not yet verified",
             "Gmail OAuth runtime proof remains unresolved",
             "Public route proof is blocked from the current egress path",
+            "Source-discovery database migration and live workflow are not production-proven",
         ],
-        "evidence_refs": ["README.md", "deployment/runtime-scaffold-pack/runtime-proof-status.md"],
+        "evidence_refs": [
+            "README.md",
+            "deployment/runtime-scaffold-pack/runtime-proof-status.md",
+            "deployment/runtime-scaffold-pack/services/xrp-hbar-apex/source_discovery_runtime.py",
+        ],
     }
 
 
