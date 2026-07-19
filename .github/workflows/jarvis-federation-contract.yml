@@ -7,7 +7,8 @@ on:
       - 'tests/test_jarvis_contract.py'
       - 'tests/test_jarvis_runtime_route.py'
       - 'tests/test_source_discovery_runtime_route.py'
-      - 'deployment/runtime-scaffold-pack/services/xrp-hbar-apex/**'
+      - 'tests/test_worker_migration_runtime.py'
+      - 'deployment/runtime-scaffold-pack/**'
       - '.github/workflows/jarvis-federation-contract.yml'
 
 permissions:
@@ -16,7 +17,7 @@ permissions:
 jobs:
   contract:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -24,20 +25,39 @@ jobs:
           python-version: '3.12'
       - name: Install runtime dependencies
         run: pip install -r deployment/runtime-scaffold-pack/services/xrp-hbar-apex/requirements.txt
-      - name: Compile adapters and routes
-        run: python -m compileall federation deployment/runtime-scaffold-pack/services/xrp-hbar-apex tests/test_jarvis_contract.py tests/test_jarvis_runtime_route.py tests/test_source_discovery_runtime_route.py
+      - name: Compile adapters routes worker and migrations
+        run: python -m compileall federation deployment/runtime-scaffold-pack/services/xrp-hbar-apex tests/test_jarvis_contract.py tests/test_jarvis_runtime_route.py tests/test_source_discovery_runtime_route.py tests/test_worker_migration_runtime.py
       - name: Run contract and runtime tests
-        run: python -m unittest tests.test_jarvis_contract tests.test_jarvis_runtime_route tests.test_source_discovery_runtime_route -v
-      - name: Verify synchronized contract constants
+        run: python -m unittest tests.test_jarvis_contract tests.test_jarvis_runtime_route tests.test_source_discovery_runtime_route tests.test_worker_migration_runtime -v
+      - name: Verify synchronized contract constants and routes
         run: |
+          set -eu
           grep -q 'CONTRACT_VERSION = "1.0.0"' federation/jarvis_contract.py
           grep -q 'CONTRACT_VERSION = "1.0.0"' deployment/runtime-scaffold-pack/services/xrp-hbar-apex/jarvis_contract.py
           grep -q 'SERVICE_ID = "xrp-hbar-hub-runtime"' federation/jarvis_contract.py
           grep -q 'SERVICE_ID = "xrp-hbar-hub-runtime"' deployment/runtime-scaffold-pack/services/xrp-hbar-apex/jarvis_contract.py
-          grep -q '"/source-discovery/status"' federation/jarvis_contract.py
-          grep -q '"/source-discovery/status"' deployment/runtime-scaffold-pack/services/xrp-hbar-apex/jarvis_contract.py
+          for route in source-discovery/status worker/status migrations/status outbound/status; do
+            grep -q "\"/$route\"" federation/jarvis_contract.py
+            grep -q "\"/$route\"" deployment/runtime-scaffold-pack/services/xrp-hbar-apex/jarvis_contract.py
+          done
+          cmp federation/jarvis_contract.py deployment/runtime-scaffold-pack/services/xrp-hbar-apex/jarvis_contract.py
+      - name: Validate Compose release graph
+        run: |
+          set -eu
+          cp deployment/runtime-scaffold-pack/.env.production.example deployment/runtime-scaffold-pack/.env.production
+          trap 'rm -f deployment/runtime-scaffold-pack/.env.production' EXIT
+          docker compose --env-file deployment/runtime-scaffold-pack/.env.production \
+            -f deployment/runtime-scaffold-pack/docker-compose.prod.yml config > /tmp/compose.yml
+          grep -q 'migrate:' /tmp/compose.yml
+          grep -q 'worker:' /tmp/compose.yml
+          grep -q 'worker_runtime.py' /tmp/compose.yml
+          grep -q 'service_completed_successfully' deployment/runtime-scaffold-pack/docker-compose.prod.yml
       - name: Build production API image
         run: docker build -t hub-jarvis-contract:test deployment/runtime-scaffold-pack/services/xrp-hbar-apex
+      - name: Verify worker and migration artifacts are packaged
+        run: |
+          set -eu
+          docker run --rm --entrypoint sh hub-jarvis-contract:test -c 'test -f /app/worker_runtime.py && test -f /app/migration_runner.py && test -f /app/runtime_jobs.py && test -f /app/migrations/001_runtime_worker.sql && test -f /app/migrations/002_source_discovery.sql'
       - name: Run ephemeral container contract smoke test
         run: |
           set -eu
@@ -53,6 +73,7 @@ jobs:
               'http://127.0.0.1:18080/.well-known/jarvis/health',
               'http://127.0.0.1:18080/.well-known/jarvis/capabilities',
               'http://127.0.0.1:18080/source-discovery/status',
+              'http://127.0.0.1:18080/outbound/status',
           ]
           for _ in range(30):
               try:
@@ -75,6 +96,9 @@ jobs:
                   if '/source-discovery/status' in url:
                       assert payload['limits']['outbound_fetch'] is False
                       assert payload['limits']['automatic_promotion'] is False
+                  if '/outbound/status' in url:
+                      assert payload['status'] == 'safe_disabled'
+                      assert payload['external_fetch_enabled'] is False
           PY
       - name: Verify no secret files are introduced
         run: |

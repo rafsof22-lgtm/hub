@@ -17,6 +17,18 @@ ALLOWED_STATUSES = {
     "WAIVED",
     "BLOCKED",
 }
+REQUIRED_ROUTES = [
+    "/health",
+    "/ready",
+    "/deployment/status",
+    "/vti/status",
+    "/email/newsletter/status",
+    "/evidence-pack/status",
+    "/source-discovery/status",
+    "/worker/status",
+    "/migrations/status",
+    "/outbound/status",
+]
 
 
 def build_contract(
@@ -27,22 +39,13 @@ def build_contract(
     route_state: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     routes = dict(route_state or {})
-    required_routes = [
-        "/health",
-        "/ready",
-        "/deployment/status",
-        "/vti/status",
-        "/email/newsletter/status",
-        "/evidence-pack/status",
-        "/source-discovery/status",
-    ]
     checks = [
         {
             "name": route,
             "status": routes.get(route, "unknown"),
             "detail": "Reported by the hub runtime; unknown is not treated as pass.",
         }
-        for route in required_routes
+        for route in REQUIRED_ROUTES
     ]
     readiness = "ready" if checks and all(item["status"] == "pass" for item in checks) else "partial"
     return {
@@ -53,23 +56,29 @@ def build_contract(
         "version": {"commit": commit, "environment": environment},
         "health": {"status": "healthy" if readiness == "ready" else "partial", "readiness": readiness, "checks": checks},
         "capabilities": [
-            {"id": "xrp-hbar-runtime", "version": "1.0.0", "status": "partial"},
+            {"id": "xrp-hbar-runtime", "version": "1.0.0", "status": "integrated_staging"},
             {"id": "market-intelligence", "version": "1.0.0", "status": "backlogged"},
             {"id": "video-email-evidence", "version": "1.0.0", "status": "partial"},
             {"id": "governed-source-discovery", "version": "1.0.0", "status": "integrated_staging"},
+            {"id": "reliable-worker", "version": "1.0.0", "status": "integrated_staging"},
+            {"id": "hash-locked-migrations", "version": "1.0.0", "status": "integrated_staging"},
+            {"id": "outbound-fail-closed", "version": "1.0.0", "status": "done_verified"},
         ],
         "deployment": {"provider": "digitalocean", "url": deployment_url, "status": "DEPLOYED_UNVERIFIED" if deployment_url else "IMPLEMENTED_NOT_INTEGRATED"},
         "approval_state": "not_required",
         "status": "IMPLEMENTED_NOT_INTEGRATED",
         "blockers": [
-            "Gmail OAuth runtime proof remains unresolved",
-            "Public route proof is blocked from the current egress path",
-            "Source-discovery database migration and live workflow are not production-proven",
+            "Gmail OAuth runtime proof remains unresolved until a valid matched credential set is installed",
+            "Production host and public-route proof require the secret-backed deployment workflow",
+            "External outbound execution remains intentionally fail-closed pending sandbox and approval proof",
         ],
         "evidence_refs": [
             "README.md",
             "deployment/runtime-scaffold-pack/runtime-proof-status.md",
             "deployment/runtime-scaffold-pack/services/xrp-hbar-apex/source_discovery_runtime.py",
+            "deployment/runtime-scaffold-pack/services/xrp-hbar-apex/runtime_jobs.py",
+            "deployment/runtime-scaffold-pack/services/xrp-hbar-apex/worker_runtime.py",
+            "deployment/runtime-scaffold-pack/services/xrp-hbar-apex/migration_runner.py",
         ],
     }
 

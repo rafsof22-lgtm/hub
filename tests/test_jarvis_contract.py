@@ -1,6 +1,6 @@
 import unittest
 
-from federation.jarvis_contract import build_contract, validate_contract
+from federation.jarvis_contract import REQUIRED_ROUTES, build_contract, validate_contract
 
 
 class JarvisContractTests(unittest.TestCase):
@@ -12,31 +12,22 @@ class JarvisContractTests(unittest.TestCase):
         self.assertEqual(validate_contract(contract), [])
 
     def test_all_required_routes_can_report_ready(self):
-        routes = {
-            "/health": "pass",
-            "/ready": "pass",
-            "/deployment/status": "pass",
-            "/vti/status": "pass",
-            "/email/newsletter/status": "pass",
-            "/evidence-pack/status": "pass",
-            "/source-discovery/status": "pass",
-        }
+        routes = {route: "pass" for route in REQUIRED_ROUTES}
         contract = build_contract(route_state=routes)
         self.assertEqual(contract["health"]["readiness"], "ready")
 
-    def test_missing_source_discovery_route_reports_partial(self):
-        routes = {
-            "/health": "pass",
-            "/ready": "pass",
-            "/deployment/status": "pass",
-            "/vti/status": "pass",
-            "/email/newsletter/status": "pass",
-            "/evidence-pack/status": "pass",
-        }
+    def test_missing_worker_route_reports_partial(self):
+        routes = {route: "pass" for route in REQUIRED_ROUTES if route != "/worker/status"}
         contract = build_contract(route_state=routes)
         self.assertEqual(contract["health"]["readiness"], "partial")
         checks = {item["name"]: item["status"] for item in contract["health"]["checks"]}
-        self.assertEqual(checks["/source-discovery/status"], "unknown")
+        self.assertEqual(checks["/worker/status"], "unknown")
+
+    def test_required_runtime_routes_are_governed(self):
+        self.assertIn("/source-discovery/status", REQUIRED_ROUTES)
+        self.assertIn("/worker/status", REQUIRED_ROUTES)
+        self.assertIn("/migrations/status", REQUIRED_ROUTES)
+        self.assertIn("/outbound/status", REQUIRED_ROUTES)
 
     def test_no_secret_values_are_present(self):
         contract = build_contract()

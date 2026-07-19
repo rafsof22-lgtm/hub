@@ -27,8 +27,23 @@ class JarvisRuntimeRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.get_json()
         self.assertEqual(payload["repository_id"], "hub")
-        self.assertTrue(payload["capabilities"])
+        capability_ids = {item["id"] for item in payload["capabilities"]}
+        self.assertIn("reliable-worker", capability_ids)
+        self.assertIn("hash-locked-migrations", capability_ids)
+        self.assertIn("outbound-fail-closed", capability_ids)
         self.assertIn("evidence_refs", payload)
+
+    def test_runtime_control_routes_are_registered(self):
+        rules = {rule.rule for rule in jarvis_runtime.app.url_map.iter_rules()}
+        for route in ("/worker/status", "/worker/jobs", "/worker/jobs/<job_id>", "/migrations/status", "/outbound/status"):
+            self.assertIn(route, rules)
+
+    def test_outbound_route_is_fail_closed(self):
+        response = self.client.get("/outbound/status")
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["status"], "safe_disabled")
+        self.assertFalse(payload["external_fetch_enabled"])
 
     def test_contract_does_not_expose_secret_fields(self):
         payload = self.client.get("/.well-known/jarvis/health").get_json()

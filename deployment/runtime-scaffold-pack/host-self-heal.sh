@@ -92,14 +92,14 @@ free_public_ports() {
 
 run_deploy() {
   cd "$RUNTIME_DIR"
-  chmod +x deploy.sh
+  chmod +x deploy.sh worker-proof.sh
   ./deploy.sh
 }
 
 local_required_check() {
   path="$1"
   log "local check /$path"
-  curl --fail --silent --show-error "http://127.0.0.1/$path" | head -c 1200
+  curl --fail --silent --show-error "http://127.0.0.1/$path" | head -c 1600
   printf '\n'
 }
 
@@ -109,7 +109,7 @@ local_diagnostic_check() {
   body_file="$(mktemp)"
   status="$(curl --silent --show-error --output "$body_file" --write-out '%{http_code}' "http://127.0.0.1/$path" || true)"
   printf 'status=%s ' "$status"
-  head -c 1200 "$body_file" | tr '\n' ' '
+  head -c 1600 "$body_file" | tr '\n' ' '
   printf '\n'
   rm -f "$body_file"
   case "$status" in
@@ -119,16 +119,21 @@ local_diagnostic_check() {
 }
 
 verify_local() {
-  for path in health ready deployment/status vti/status email/newsletter/status evidence-pack/status; do
+  for path in health ready deployment/status vti/status email/newsletter/status evidence-pack/status source-discovery/status migrations/status worker/status outbound/status; do
     local_required_check "$path"
   done
   local_diagnostic_check email/newsletter/gmail/status
 }
 
+verify_worker_execution() {
+  cd "$RUNTIME_DIR"
+  BASE_URL="http://127.0.0.1" ./worker-proof.sh
+}
+
 print_public_checks() {
   base_url="$(grep -E '^BASE_URL=' "$RUNTIME_DIR/.env.production" | tail -n 1 | cut -d= -f2- | sed 's:/*$::')"
   log "public checks to run from outside host:"
-  for path in health ready deployment/status vti/status email/newsletter/status email/newsletter/gmail/status evidence-pack/status; do
+  for path in health ready deployment/status vti/status email/newsletter/status email/newsletter/gmail/status evidence-pack/status source-discovery/status migrations/status worker/status outbound/status; do
     printf 'curl -i %s/%s\n' "$base_url" "$path"
   done
 }
@@ -141,6 +146,7 @@ main() {
   free_public_ports
   run_deploy
   verify_local
+  verify_worker_execution
   print_public_checks
   log "complete"
 }

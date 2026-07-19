@@ -5,6 +5,7 @@ import re
 from typing import Any
 
 from app import app
+import runtime_jobs  # noqa: F401,E402 - registers worker, migration and outbound routes
 import source_discovery_runtime  # noqa: F401,E402 - registers governed source-discovery routes
 from jarvis_contract import build_contract, validate_contract
 
@@ -28,6 +29,9 @@ def _route_state() -> dict[str, str]:
         "/email/newsletter/status",
         "/evidence-pack/status",
         "/source-discovery/status",
+        "/worker/status",
+        "/migrations/status",
+        "/outbound/status",
     ]
     return {route: "pass" if route in registered else "unknown" for route in required}
 
