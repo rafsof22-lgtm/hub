@@ -38,6 +38,15 @@ def migration_files(directory: Path) -> list[Path]:
     return sorted(path for path in directory.glob("*.sql") if path.is_file())
 
 
+def sql_statements(text: str) -> list[str]:
+    statements: list[str] = []
+    for part in text.split(";"):
+        statement = part.strip()
+        if statement:
+            statements.append(statement)
+    return statements
+
+
 def apply_migrations(directory: Path, *, check_only: bool = False) -> dict:
     files = migration_files(directory)
     applied: list[str] = []
@@ -63,7 +72,8 @@ def apply_migrations(directory: Path, *, check_only: bool = False) -> dict:
                     continue
                 if check_only:
                     raise RuntimeError(f"pending migration: {path.name}")
-                cur.execute(sql_bytes.decode("utf-8"))
+                for statement in sql_statements(sql_bytes.decode("utf-8")):
+                    cur.execute(statement)
                 cur.execute(
                     "INSERT INTO schema_migration (migration_name, sha256) VALUES (%s, %s);",
                     (path.name, digest),
