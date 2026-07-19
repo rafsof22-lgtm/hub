@@ -1,0 +1,108 @@
+{
+  "manifest_version": "1.0.0",
+  "generated_date": "2026-07-19",
+  "status": "PARTIAL_RAW_RECOVERY_PROVEN",
+  "source_authority": [
+    "archive_manifest.json",
+    "source_inventory.csv",
+    "folder0_partial.raw",
+    "jarvis_extract_partial.py",
+    "jarvis_demo_parse_extract.py",
+    "MASTER_SPEC_20260419_192720.txt",
+    "Pasted markdown.md"
+  ],
+  "archive": {
+    "expected_name": "KIMI_WORKSPACE_RAW.7z",
+    "historical_path": "/mnt/data/KIMI_WORKSPACE_RAW.7z",
+    "archive_bytes": 417631661,
+    "archive_entries": 4070,
+    "stream_files": 3314,
+    "directories": 667,
+    "empty_or_no_stream_entries": 756,
+    "compression_folders": 2,
+    "pack_sizes": [14721017, 402860924],
+    "folder0_unpacked_bytes": 120258421,
+    "decoded_header_bytes": 823578,
+    "decoded_header_crc": "a3d23531"
+  },
+  "available_derivatives": {
+    "source_inventory": {
+      "available": true,
+      "fields": [
+        "index",
+        "name",
+        "has_stream",
+        "is_dir",
+        "size",
+        "crc32",
+        "folder",
+        "substream"
+      ],
+      "coverage": "all 4070 archive entries"
+    },
+    "folder0_partial_raw": {
+      "available": true,
+      "partial_unpacked_bytes": 75000000,
+      "coverage_basis": "prefix of compression folder 0 unpacked stream",
+      "folder0_total_unpacked_bytes": 120258421,
+      "byte_coverage_percent": 62.365579,
+      "remaining_folder0_bytes": 45258421
+    },
+    "historical_project_knowledgebase": {
+      "path": "projects/PROJECT_001_AUTO_PARTS/knowledge_base/EXTRACTED_DOCUMENTS.txt",
+      "inventory_size_bytes": 4852187,
+      "reported_characters": 4800000,
+      "classification": "historical project-source derivative"
+    }
+  },
+  "recovered_capability_domains": [
+    "agent orchestration",
+    "AI reasoning and continuous learning",
+    "knowledge graph and knowledgebase ingestion",
+    "multimodal processing",
+    "API gateway and natural-language API",
+    "chat import, panels, streaming and unified chat",
+    "content/avatar workflows",
+    "cost optimisation",
+    "crypto and market dashboards",
+    "health and recovery",
+    "income strategies",
+    "integration registry",
+    "video and social intelligence",
+    "MCP code execution",
+    "patent research and monetisation",
+    "payments",
+    "PC automation",
+    "property automation",
+    "security audit, CVE, threat intelligence and kill switch",
+    "trading backtest, orders and signals",
+    "benchmark, load, performance, profiling and stress testing",
+    "project knowledgebase and workflow management",
+    "UI dashboards, setup wizard and model selection"
+  ],
+  "proof_boundaries": {
+    "proven": [
+      "archive header and file-tree inventory were parsed",
+      "all archive entry names, sizes, CRC32 values and stream positions are represented in source_inventory.csv",
+      "a 75,000,000-byte prefix of folder 0 was decompressed historically",
+      "project-source text and code from that prefix are searchable in the File Library",
+      "the recovery tool can deterministically split fully covered files and validate their CRC32 values"
+    ],
+    "not_proven": [
+      "byte-for-byte recovery of the remaining 45,258,421 bytes of folder 0",
+      "byte-for-byte recovery of compression folder 1",
+      "full original archive SHA-256",
+      "full raw ChatGPT conversations.json message graph",
+      "attachment and branch completeness for the ChatGPT export"
+    ]
+  },
+  "completion_gates": {
+    "historical_file_tree_denominator": "DONE_VERIFIED",
+    "historical_module_domain_recovery": "DONE_VERIFIED_FOR_ACCESSIBLE_PROJECT_SOURCES",
+    "partial_folder0_recovery_pipeline": "IMPLEMENTED_STAGING",
+    "full_folder0_byte_recovery": "BLOCKED_SOURCE_BYTES",
+    "folder1_byte_recovery": "BLOCKED_SOURCE_BYTES",
+    "raw_chatgpt_export_recovery": "BLOCKED_SOURCE_BYTES",
+    "global_no_gaps": "BLOCKED_SOURCE_BYTES"
+  }
+}
