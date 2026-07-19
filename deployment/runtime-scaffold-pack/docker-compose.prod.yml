@@ -15,6 +15,23 @@ services:
       api:
         condition: service_started
 
+  migrate:
+    build:
+      context: ./services/xrp-hbar-apex
+    command: python migration_runner.py --directory /app/migrations
+    restart: "no"
+    env_file:
+      - .env.production
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: xrp_hbar_apex
+      POSTGRES_USER: postgres
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+
   api:
     build:
       context: ./services/xrp-hbar-apex
@@ -27,9 +44,12 @@ services:
       POSTGRES_DB: xrp_hbar_apex
       POSTGRES_USER: postgres
       REDIS_URL: redis://redis:6379/0
+      WORKER_QUEUE: jarvis:jobs
+      WORKER_PROCESSING_QUEUE: jarvis:jobs:processing
+      WORKER_DLQ: jarvis:jobs:dlq
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     healthcheck:
@@ -41,7 +61,7 @@ services:
   worker:
     build:
       context: ./services/xrp-hbar-apex
-    command: sh -c "python - <<'PY'\nimport time\nprint('worker placeholder running', flush=True)\nwhile True:\n    time.sleep(3600)\nPY"
+    command: python worker_runtime.py
     restart: unless-stopped
     env_file:
       - .env.production
@@ -51,9 +71,14 @@ services:
       POSTGRES_DB: xrp_hbar_apex
       POSTGRES_USER: postgres
       REDIS_URL: redis://redis:6379/0
+      WORKER_QUEUE: jarvis:jobs
+      WORKER_PROCESSING_QUEUE: jarvis:jobs:processing
+      WORKER_DLQ: jarvis:jobs:dlq
+      WORKER_MAX_RETRIES: 3
+      WORKER_HEARTBEAT_SECONDS: 10
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
 
