@@ -15,10 +15,14 @@ CREATE TABLE IF NOT EXISTS source_candidate (
     hard_fail_reasons JSONB NOT NULL DEFAULT '[]'::jsonb,
     official_url TEXT,
     decision_reason TEXT,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (canonical_url, discovery_source, discovery_tier)
 );
+
+ALTER TABLE source_candidate
+    ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 CREATE INDEX IF NOT EXISTS source_candidate_state_idx ON source_candidate (state, updated_at DESC);
 CREATE INDEX IF NOT EXISTS source_candidate_canonical_url_idx ON source_candidate (canonical_url);
