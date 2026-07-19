@@ -1,11 +1,20 @@
 from __future__ import annotations
 
 import os
+import re
 from typing import Any
 
 from app import app
 import source_discovery_runtime  # noqa: F401,E402 - registers governed source-discovery routes
 from jarvis_contract import build_contract, validate_contract
+
+# Extend the source-discovery guard for quoted JSON/YAML-style secret keys.
+source_discovery_runtime.SECRET_PATTERNS.append(
+    re.compile(
+        r"[\"']?(?:api[_-]?key|client[_-]?secret|refresh[_-]?token|private[_-]?key|seed[_-]?phrase)[\"']?\s*[:=]\s*[\"']?[^\"'\s,;]{8,}",
+        re.I,
+    )
+)
 
 
 def _route_state() -> dict[str, str]:
