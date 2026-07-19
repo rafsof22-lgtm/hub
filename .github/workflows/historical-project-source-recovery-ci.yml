@@ -34,10 +34,12 @@ jobs:
           import json
           from pathlib import Path
           data = json.loads(Path('reconstruction/historical_project_source_recovery_manifest.json').read_text())
-          assert data['archive']['entries'] == 4070
+          assert data['status'] == 'PARTIAL_RAW_RECOVERY_PROVEN'
+          assert data['archive']['archive_entries'] == 4070
           assert data['archive']['stream_files'] == 3314
           assert data['archive']['compression_folders'] == 2
-          assert data['partial_raw']['bytes'] == 75000000
-          assert data['classification']['semantic_workspace_reconstruction'] == 'PARTIAL_RAW_RECOVERY_PROVEN'
-          assert data['classification']['global_byte_exact_archive_verification'] == 'BLOCKED_ORIGINAL_ARCHIVE_BYTES'
+          assert data['available_derivatives']['folder0_partial_raw']['partial_unpacked_bytes'] == 75000000
+          assert data['completion_gates']['historical_file_tree_denominator'] == 'DONE_VERIFIED'
+          assert data['completion_gates']['historical_module_domain_recovery'] == 'DONE_VERIFIED_FOR_ACCESSIBLE_PROJECT_SOURCES'
+          assert data['completion_gates']['global_no_gaps'] == 'BLOCKED_SOURCE_BYTES'
           PY
