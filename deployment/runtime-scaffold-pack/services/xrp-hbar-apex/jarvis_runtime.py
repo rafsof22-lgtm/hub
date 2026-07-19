@@ -4,6 +4,7 @@ import os
 from typing import Any
 
 from app import app
+import source_discovery_runtime  # noqa: F401,E402 - registers governed source-discovery routes
 from jarvis_contract import build_contract, validate_contract
 
 
@@ -17,6 +18,7 @@ def _route_state() -> dict[str, str]:
         "/vti/status",
         "/email/newsletter/status",
         "/evidence-pack/status",
+        "/source-discovery/status",
     ]
     return {route: "pass" if route in registered else "unknown" for route in required}
 
