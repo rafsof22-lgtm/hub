@@ -44,7 +44,9 @@ jobs:
       - name: Validate Compose release graph
         run: |
           set -eu
-          docker compose --env-file deployment/runtime-scaffold-pack/.env.production.example \
+          cp deployment/runtime-scaffold-pack/.env.production.example deployment/runtime-scaffold-pack/.env.production
+          trap 'rm -f deployment/runtime-scaffold-pack/.env.production' EXIT
+          docker compose --env-file deployment/runtime-scaffold-pack/.env.production \
             -f deployment/runtime-scaffold-pack/docker-compose.prod.yml config > /tmp/compose.yml
           grep -q 'migrate:' /tmp/compose.yml
           grep -q 'python worker_runtime.py' /tmp/compose.yml
@@ -54,7 +56,7 @@ jobs:
       - name: Verify worker and migration artifacts are packaged
         run: |
           set -eu
-          docker run --rm --entrypoint sh hub-jarvis-contract:test -c 'test -f /app/worker_runtime.py && test -f /app/migration_runner.py && test -f /app/runtime_jobs.py && test -f /app/migrations/001_runtime_worker.sql'
+          docker run --rm --entrypoint sh hub-jarvis-contract:test -c 'test -f /app/worker_runtime.py && test -f /app/migration_runner.py && test -f /app/runtime_jobs.py && test -f /app/migrations/001_runtime_worker.sql && test -f /app/migrations/002_source_discovery.sql'
       - name: Run ephemeral container contract smoke test
         run: |
           set -eu
