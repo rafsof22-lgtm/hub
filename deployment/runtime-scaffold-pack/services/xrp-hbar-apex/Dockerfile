@@ -9,6 +9,10 @@ COPY app.py .
 COPY jarvis_contract.py .
 COPY jarvis_runtime.py .
 COPY source_discovery_runtime.py .
+COPY runtime_jobs.py .
+COPY worker_runtime.py .
+COPY migration_runner.py .
+COPY migrations ./migrations
 
 EXPOSE 8080
 
