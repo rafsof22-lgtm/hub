@@ -95,7 +95,7 @@ fi
 echo "[deploy] pulling latest images"
 $COMPOSE_CMD --env-file .env.production -f docker-compose.prod.yml pull || true
 
-echo "[deploy] starting services"
+echo "[deploy] starting services and applying migrations"
 if ! $COMPOSE_CMD --env-file .env.production -f docker-compose.prod.yml up -d --remove-orphans --build --force-recreate; then
   echo "[deploy] compose up failed; retrying once after explicit stale container cleanup"
   retry_runtime_containers="$(docker ps -a --format '{{.Names}}' | grep '^runtime-scaffold-pack-' || true)"
@@ -114,12 +114,12 @@ if ! $COMPOSE_CMD --env-file .env.production -f docker-compose.prod.yml up -d --
 fi
 
 echo "[deploy] current status"
-$COMPOSE_CMD --env-file .env.production -f docker-compose.prod.yml ps
+$COMPOSE_CMD --env-file .env.production -f docker-compose.prod.yml ps -a
 
-echo "[deploy] waiting for local health endpoints"
-for path in health ready deployment/status; do
+echo "[deploy] waiting for local proof endpoints"
+for path in health ready deployment/status migrations/status worker/status outbound/status; do
   success=0
-  for attempt in $(seq 1 30); do
+  for attempt in $(seq 1 45); do
     if curl --fail --silent --show-error "http://127.0.0.1/${path}" >/dev/null 2>&1; then
       success=1
       break
@@ -129,10 +129,18 @@ for path in health ready deployment/status; do
 
   if [ "$success" -ne 1 ]; then
     echo "[deploy] local endpoint failed: /${path}"
-    $COMPOSE_CMD --env-file .env.production -f docker-compose.prod.yml logs --tail=120
+    $COMPOSE_CMD --env-file .env.production -f docker-compose.prod.yml logs --tail=160
     exit 1
   fi
 done
+
+echo "[deploy] migration ledger"
+curl --fail --silent --show-error http://127.0.0.1/migrations/status
+echo
+
+echo "[deploy] worker heartbeat"
+curl --fail --silent --show-error http://127.0.0.1/worker/status
+echo
 
 echo "[deploy] active public listeners"
 if command -v ss >/dev/null 2>&1; then
@@ -140,4 +148,4 @@ if command -v ss >/dev/null 2>&1; then
 fi
 
 echo "[deploy] complete"
-echo "Next: verify /health, /ready, and /deployment/status on your live domain."
+echo "Next: verify all public proof gates on the live base URL."
