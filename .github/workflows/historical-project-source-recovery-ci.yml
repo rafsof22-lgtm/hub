@@ -1,0 +1,43 @@
+name: Historical Project Source Recovery CI
+
+on:
+  pull_request:
+    paths:
+      - "reconstruction/**"
+      - "tests/test_recover_project_sources.py"
+      - ".github/workflows/historical-project-source-recovery-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "reconstruction/**"
+      - "tests/test_recover_project_sources.py"
+      - ".github/workflows/historical-project-source-recovery-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  recovery-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile recovery pipeline
+        run: python -m py_compile reconstruction/recover_project_sources.py tests/test_recover_project_sources.py
+      - name: Run recovery tests
+        run: python -m unittest tests.test_recover_project_sources -v
+      - name: Validate recovery manifest
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('reconstruction/historical_project_source_recovery_manifest.json').read_text())
+          assert data['archive']['entries'] == 4070
+          assert data['archive']['stream_files'] == 3314
+          assert data['archive']['compression_folders'] == 2
+          assert data['partial_raw']['bytes'] == 75000000
+          assert data['classification']['semantic_workspace_reconstruction'] == 'PARTIAL_RAW_RECOVERY_PROVEN'
+          assert data['classification']['global_byte_exact_archive_verification'] == 'BLOCKED_ORIGINAL_ARCHIVE_BYTES'
+          PY
