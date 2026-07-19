@@ -19,9 +19,24 @@ class JarvisContractTests(unittest.TestCase):
             "/vti/status": "pass",
             "/email/newsletter/status": "pass",
             "/evidence-pack/status": "pass",
+            "/source-discovery/status": "pass",
         }
         contract = build_contract(route_state=routes)
         self.assertEqual(contract["health"]["readiness"], "ready")
+
+    def test_missing_source_discovery_route_reports_partial(self):
+        routes = {
+            "/health": "pass",
+            "/ready": "pass",
+            "/deployment/status": "pass",
+            "/vti/status": "pass",
+            "/email/newsletter/status": "pass",
+            "/evidence-pack/status": "pass",
+        }
+        contract = build_contract(route_state=routes)
+        self.assertEqual(contract["health"]["readiness"], "partial")
+        checks = {item["name"]: item["status"] for item in contract["health"]["checks"]}
+        self.assertEqual(checks["/source-discovery/status"], "unknown")
 
     def test_no_secret_values_are_present(self):
         contract = build_contract()
