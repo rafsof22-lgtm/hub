@@ -16,16 +16,38 @@ from app import app, _db_connect, _json_response
 MAX_BODY_BYTES = 1_000_000
 MAX_ITEMS = 500
 MAX_TEXT_CHARS = 900_000
-TRACKING_KEYS = {"utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "gclid", "fbclid"}
+TRACKING_KEYS = {
+    "utm_source",
+    "utm_medium",
+    "utm_campaign",
+    "utm_term",
+    "utm_content",
+    "gclid",
+    "fbclid",
+}
 SECRET_PATTERNS = [
     re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----", re.I),
     re.compile(r"\bsk-[A-Za-z0-9_-]{20,}\b"),
-    re.compile(r"\b(?:api[_-]?key|client[_-]?secret|refresh[_-]?token|private[_-]?key|seed[_-]?phrase)\b\s*[:=]\s*[^\s,;]{8,}", re.I),
+    re.compile(
+        r'["\']?(?:api[_-]?key|client[_-]?secret|refresh[_-]?token|private[_-]?key|seed[_-]?phrase)["\']?\s*[:=]\s*["\']?[^\s,;"\']{8,}',
+        re.I,
+    ),
 ]
 ALLOWED_STATES = {
-    "DISCOVERED", "NORMALISED", "OFFICIAL_SOURCE_RESOLVED", "VERIFIED_CANDIDATE",
-    "QUARANTINED", "SANDBOX_READY", "SANDBOX_PROVEN", "APPROVAL_REQUIRED",
-    "CANARY", "APPROVED_PRODUCTION", "WATCHLIST", "DEPRECATED", "REVOKED", "REJECTED",
+    "DISCOVERED",
+    "NORMALISED",
+    "OFFICIAL_SOURCE_RESOLVED",
+    "VERIFIED_CANDIDATE",
+    "QUARANTINED",
+    "SANDBOX_READY",
+    "SANDBOX_PROVEN",
+    "APPROVAL_REQUIRED",
+    "CANARY",
+    "APPROVED_PRODUCTION",
+    "WATCHLIST",
+    "DEPRECATED",
+    "REVOKED",
+    "REJECTED",
 }
 TRANSITIONS = {
     "DISCOVERED": {"NORMALISED", "REJECTED"},
@@ -43,6 +65,17 @@ TRANSITIONS = {
     "REJECTED": set(),
     "REVOKED": set(),
 }
+REASON_REQUIRED_STATES = {
+    "APPROVAL_REQUIRED",
+    "CANARY",
+    "APPROVED_PRODUCTION",
+    "WATCHLIST",
+    "DEPRECATED",
+    "REVOKED",
+    "REJECTED",
+}
+APPROVAL_REFERENCE_REQUIRED_STATES = {"CANARY", "APPROVED_PRODUCTION"}
+ROLLBACK_REFERENCE_REQUIRED_STATES = {"CANARY", "APPROVED_PRODUCTION"}
 
 
 def _now() -> str:
@@ -59,12 +92,24 @@ def _canonicalize_url(value: str) -> str:
     netloc = host
     if port and not ((scheme == "http" and port == 80) or (scheme == "https" and port == 443)):
         netloc = f"{host}:{port}"
-    query = urlencode(sorted((k, v) for k, v in parse_qsl(parsed.query, keep_blank_values=True) if k.lower() not in TRACKING_KEYS))
+    query = urlencode(
+        sorted(
+            (key, value)
+            for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+            if key.lower() not in TRACKING_KEYS
+        )
+    )
     return urlunsplit((scheme, netloc, parsed.path or "/", query, ""))
 
 
 def _candidate_id(url: str, source: str, tier: int) -> str:
     return hashlib.sha256(f"{url}|{source}|{tier}".encode("utf-8")).hexdigest()[:24]
+
+
+def _decision_id(candidate_id: str, current: str, target: str, observed_at: str) -> str:
+    return hashlib.sha256(
+        f"{candidate_id}|{current}|{target}|{observed_at}".encode("utf-8")
+    ).hexdigest()[:24]
 
 
 def _contains_secret(text: str) -> bool:
@@ -81,6 +126,26 @@ def _bounded_text(payload: dict, key: str) -> str:
     return value
 
 
+def _validate_transition_request(
+    current: str,
+    target: str,
+    reason: str,
+    approval_reference: str,
+    rollback_reference: str,
+) -> str | None:
+    if target not in ALLOWED_STATES:
+        return "unknown target_state"
+    if target not in TRANSITIONS.get(current, set()):
+        return f"transition not allowed: {current} -> {target}"
+    if target in REASON_REQUIRED_STATES and not reason:
+        return f"reason is required for transition to {target}"
+    if target in APPROVAL_REFERENCE_REQUIRED_STATES and not approval_reference:
+        return f"approval_reference is required for transition to {target}"
+    if target in ROLLBACK_REFERENCE_REQUIRED_STATES and not rollback_reference:
+        return f"rollback_reference is required for transition to {target}"
+    return None
+
+
 class _BookmarkParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
@@ -90,7 +155,7 @@ class _BookmarkParser(HTMLParser):
 
     def handle_starttag(self, tag, attrs):
         if tag.lower() == "a":
-            values = {str(k).lower(): v for k, v in attrs}
+            values = {str(key).lower(): value for key, value in attrs}
             if values.get("href"):
                 self.href = str(values["href"]).strip()
                 self.title = []
@@ -143,7 +208,12 @@ def _parse_candidates(kind: str, text: str, source: str, tier: int) -> list[dict
             if isinstance(item, str):
                 raw.append((item, ""))
             elif isinstance(item, dict):
-                raw.append((str(item.get("url") or item.get("source_url") or ""), str(item.get("title") or "")))
+                raw.append(
+                    (
+                        str(item.get("url") or item.get("source_url") or ""),
+                        str(item.get("title") or ""),
+                    )
+                )
     else:
         raise ValueError("unsupported import kind")
 
@@ -157,25 +227,28 @@ def _parse_candidates(kind: str, text: str, source: str, tier: int) -> list[dict
         if canonical in seen:
             continue
         seen.add(canonical)
-        result.append({
-            "candidate_id": _candidate_id(canonical, source, tier),
-            "source_url": canonical,
-            "title": title[:300],
-            "discovery_source": source[:120],
-            "discovery_tier": tier,
-            "state": "NORMALISED",
-        })
+        result.append(
+            {
+                "candidate_id": _candidate_id(canonical, source, tier),
+                "source_url": canonical,
+                "title": title[:300],
+                "discovery_source": source[:120],
+                "discovery_tier": tier,
+                "state": "NORMALISED",
+            }
+        )
     return result
 
 
 def _ensure_source_tables(conn) -> None:
     with conn.cursor() as cur:
-        cur.execute("""
+        cur.execute(
+            """
             CREATE TABLE IF NOT EXISTS source_candidate (
                 candidate_id TEXT PRIMARY KEY,
                 source_url TEXT NOT NULL,
                 canonical_url TEXT NOT NULL,
-                title TEXT,
+                title TEXT NOT NULL DEFAULT '',
                 discovery_source TEXT NOT NULL,
                 discovery_tier INTEGER NOT NULL CHECK (discovery_tier BETWEEN 0 AND 3),
                 state TEXT NOT NULL,
@@ -184,9 +257,30 @@ def _ensure_source_tables(conn) -> None:
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
             );
-        """)
+            """
+        )
+        cur.execute(
+            "ALTER TABLE source_candidate ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;"
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS integration_decision (
+                decision_id TEXT PRIMARY KEY,
+                candidate_id TEXT NOT NULL REFERENCES source_candidate(candidate_id) ON DELETE CASCADE,
+                decision TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                approval_reference TEXT,
+                rollback_reference TEXT,
+                evidence JSONB NOT NULL DEFAULT '{}'::jsonb,
+                decided_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+            """
+        )
         cur.execute("CREATE INDEX IF NOT EXISTS source_candidate_state_idx ON source_candidate(state);")
         cur.execute("CREATE INDEX IF NOT EXISTS source_candidate_url_idx ON source_candidate(canonical_url);")
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS integration_decision_candidate_idx ON integration_decision(candidate_id, decided_at DESC);"
+        )
 
 
 def _format_row(row: dict) -> dict:
@@ -210,24 +304,35 @@ def source_discovery_request_guard():
     if not request.path.startswith("/source-discovery/"):
         return None
     if request.content_length and request.content_length > MAX_BODY_BYTES:
-        return _json_response({"status": "invalid", "error": "request body exceeds maximum size"}, 413)
+        return _json_response(
+            {"status": "invalid", "error": "request body exceeds maximum size"},
+            413,
+        )
     return None
 
 
 @app.get("/source-discovery/status")
 def source_discovery_status():
-    return _json_response({
-        "status": "ready",
-        "proof_label": "SOURCE_DISCOVERY_RUNTIME_ROUTES_REGISTERED",
-        "capabilities": ["bounded_import", "postgres_persistence", "read_only_retrieval", "governed_transition"],
-        "limits": {
-            "outbound_fetch": False,
-            "automatic_promotion": False,
-            "production_credentials": False,
-            "max_body_bytes": MAX_BODY_BYTES,
-            "max_items": MAX_ITEMS,
-        },
-    })
+    return _json_response(
+        {
+            "status": "ready",
+            "proof_label": "SOURCE_DISCOVERY_RUNTIME_ROUTES_REGISTERED",
+            "capabilities": [
+                "bounded_import",
+                "postgres_persistence",
+                "read_only_retrieval",
+                "governed_transition",
+                "approval_and_rollback_evidence",
+            ],
+            "limits": {
+                "outbound_fetch": False,
+                "automatic_promotion": False,
+                "production_credentials": False,
+                "max_body_bytes": MAX_BODY_BYTES,
+                "max_items": MAX_ITEMS,
+            },
+        }
+    )
 
 
 @app.post("/source-discovery/import/<kind>")
@@ -247,8 +352,13 @@ def source_discovery_import(kind: str):
         _ensure_source_tables(conn)
         with conn.cursor() as cur:
             for item in candidates:
-                metadata = {"import_kind": kind, "imported_at": _now(), "automatic_promotion_allowed": False}
-                cur.execute("""
+                metadata = {
+                    "import_kind": kind,
+                    "imported_at": _now(),
+                    "automatic_promotion_allowed": False,
+                }
+                cur.execute(
+                    """
                     INSERT INTO source_candidate (
                         candidate_id, source_url, canonical_url, title, discovery_source,
                         discovery_tier, state, metadata
@@ -257,18 +367,33 @@ def source_discovery_import(kind: str):
                         title = EXCLUDED.title,
                         metadata = source_candidate.metadata || EXCLUDED.metadata,
                         updated_at = now();
-                """, (
-                    item["candidate_id"], item["source_url"], item["source_url"], item["title"] or None,
-                    item["discovery_source"], item["discovery_tier"], item["state"], Jsonb(metadata),
-                ))
-    return _json_response({
-        "status": "accepted",
-        "proof_label": "SOURCE_DISCOVERY_BOUNDED_IMPORT_PERSISTED",
-        "kind": kind,
-        "count": len(candidates),
-        "candidate_ids": [item["candidate_id"] for item in candidates],
-        "limits": {"outbound_fetch": False, "automatic_promotion": False, "secret_material_rejected": True},
-    }, 201)
+                    """,
+                    (
+                        item["candidate_id"],
+                        item["source_url"],
+                        item["source_url"],
+                        item["title"],
+                        item["discovery_source"],
+                        item["discovery_tier"],
+                        item["state"],
+                        Jsonb(metadata),
+                    ),
+                )
+    return _json_response(
+        {
+            "status": "accepted",
+            "proof_label": "SOURCE_DISCOVERY_BOUNDED_IMPORT_PERSISTED",
+            "kind": kind,
+            "count": len(candidates),
+            "candidate_ids": [item["candidate_id"] for item in candidates],
+            "limits": {
+                "outbound_fetch": False,
+                "automatic_promotion": False,
+                "secret_material_rejected": True,
+            },
+        },
+        201,
+    )
 
 
 @app.get("/source-discovery/candidates")
@@ -284,11 +409,19 @@ def source_discovery_candidates():
         _ensure_source_tables(conn)
         with conn.cursor() as cur:
             if state:
-                cur.execute("SELECT * FROM source_candidate WHERE state = %s ORDER BY updated_at DESC LIMIT %s;", (state, limit))
+                cur.execute(
+                    "SELECT * FROM source_candidate WHERE state = %s ORDER BY updated_at DESC LIMIT %s;",
+                    (state, limit),
+                )
             else:
-                cur.execute("SELECT * FROM source_candidate ORDER BY updated_at DESC LIMIT %s;", (limit,))
+                cur.execute(
+                    "SELECT * FROM source_candidate ORDER BY updated_at DESC LIMIT %s;",
+                    (limit,),
+                )
             rows = cur.fetchall()
-    return _json_response({"status": "ok", "count": len(rows), "items": [_format_row(row) for row in rows]})
+    return _json_response(
+        {"status": "ok", "count": len(rows), "items": [_format_row(row) for row in rows]}
+    )
 
 
 @app.get("/source-discovery/candidates/<candidate_id>")
@@ -296,7 +429,10 @@ def source_discovery_candidate(candidate_id: str):
     with _db_connect() as conn:
         _ensure_source_tables(conn)
         with conn.cursor() as cur:
-            cur.execute("SELECT * FROM source_candidate WHERE candidate_id = %s;", (candidate_id.strip(),))
+            cur.execute(
+                "SELECT * FROM source_candidate WHERE candidate_id = %s;",
+                (candidate_id.strip(),),
+            )
             row = cur.fetchone()
     if not row:
         return _json_response({"status": "not_found", "candidate_id": candidate_id}, 404)
@@ -308,24 +444,68 @@ def source_discovery_transition(candidate_id: str):
     payload = request.get_json(silent=True) or {}
     target = str(payload.get("target_state") or "").strip()
     reason = str(payload.get("reason") or "").strip()[:500]
+    approval_reference = str(payload.get("approval_reference") or "").strip()[:300]
+    rollback_reference = str(payload.get("rollback_reference") or "").strip()[:300]
     if target not in ALLOWED_STATES:
         return _json_response({"status": "invalid", "error": "unknown target_state"}, 400)
+
+    observed_at = _now()
     with _db_connect() as conn:
         _ensure_source_tables(conn)
         with conn.cursor() as cur:
-            cur.execute("SELECT state FROM source_candidate WHERE candidate_id = %s FOR UPDATE;", (candidate_id.strip(),))
+            cur.execute(
+                "SELECT state FROM source_candidate WHERE candidate_id = %s FOR UPDATE;",
+                (candidate_id.strip(),),
+            )
             row = cur.fetchone()
             if not row:
                 return _json_response({"status": "not_found", "candidate_id": candidate_id}, 404)
             current = row["state"]
-            if target not in TRANSITIONS.get(current, set()):
-                return _json_response({"status": "blocked", "error": f"transition not allowed: {current} -> {target}"}, 409)
-            cur.execute("UPDATE source_candidate SET state = %s, decision_reason = %s, updated_at = now() WHERE candidate_id = %s;", (target, reason or None, candidate_id.strip()))
-    return _json_response({
-        "status": "accepted",
-        "proof_label": "SOURCE_DISCOVERY_GOVERNED_TRANSITION_PERSISTED",
-        "candidate_id": candidate_id,
-        "from_state": current,
-        "to_state": target,
-        "automatic_promotion": False,
-    })
+            error = _validate_transition_request(
+                current,
+                target,
+                reason,
+                approval_reference,
+                rollback_reference,
+            )
+            if error:
+                return _json_response({"status": "blocked", "error": error}, 409)
+            cur.execute(
+                "UPDATE source_candidate SET state = %s, decision_reason = %s, updated_at = now() WHERE candidate_id = %s;",
+                (target, reason or None, candidate_id.strip()),
+            )
+            evidence = {
+                "from_state": current,
+                "to_state": target,
+                "automatic_promotion": False,
+                "recorded_at": observed_at,
+            }
+            cur.execute(
+                """
+                INSERT INTO integration_decision (
+                    decision_id, candidate_id, decision, reason, approval_reference,
+                    rollback_reference, evidence
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb);
+                """,
+                (
+                    _decision_id(candidate_id.strip(), current, target, observed_at),
+                    candidate_id.strip(),
+                    target,
+                    reason or "governed lifecycle transition",
+                    approval_reference or None,
+                    rollback_reference or None,
+                    Jsonb(evidence),
+                ),
+            )
+    return _json_response(
+        {
+            "status": "accepted",
+            "proof_label": "SOURCE_DISCOVERY_GOVERNED_TRANSITION_PERSISTED",
+            "candidate_id": candidate_id,
+            "from_state": current,
+            "to_state": target,
+            "automatic_promotion": False,
+            "approval_reference_recorded": bool(approval_reference),
+            "rollback_reference_recorded": bool(rollback_reference),
+        }
+    )
