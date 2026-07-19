@@ -27,7 +27,7 @@ jobs:
       - name: Compile recovery pipeline
         run: python -m py_compile reconstruction/recover_project_sources.py tests/test_recover_project_sources.py
       - name: Run recovery tests
-        run: python -m unittest tests.test_recover_project_sources -v
+        run: python -m unittest discover -s tests -p 'test_recover_project_sources.py' -v
       - name: Validate recovery manifest
         run: |
           python - <<'PY'
