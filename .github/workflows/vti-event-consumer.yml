@@ -1,0 +1,37 @@
+name: VTI Federation Event Consumer CI
+
+on:
+  pull_request:
+    paths:
+      - 'federation/vti_event_consumer.py'
+      - 'tests/test_vti_event_consumer.py'
+      - '.github/workflows/vti-event-consumer.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  consumer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile consumer and tests
+        run: python -m compileall federation/vti_event_consumer.py tests/test_vti_event_consumer.py
+      - name: Run deterministic consumer tests
+        run: python -m unittest tests.test_vti_event_consumer -v
+      - name: Verify authentication idempotency retry and dead-letter controls
+        run: |
+          set -eu
+          grep -q 'SCHEMA_VERSION = "1.0.0"' federation/vti_event_consumer.py
+          grep -q 'EXPECTED_PRODUCER = "vti-evidence-service"' federation/vti_event_consumer.py
+          grep -q 'EXPECTED_CONSUMER = "xrp-hbar-hub-runtime"' federation/vti_event_consumer.py
+          grep -q 'hmac.compare_digest' federation/vti_event_consumer.py
+          grep -q 'idempotency_key TEXT NOT NULL UNIQUE' federation/vti_event_consumer.py
+          grep -q 'vti_event_attempts' federation/vti_event_consumer.py
+          grep -q 'vti_event_dead_letters' federation/vti_event_consumer.py
+          grep -q 'replay_dead_letter' federation/vti_event_consumer.py
+          ! grep -RInE '(FEDERATION_SIGNING_SECRET|VTI_EVENT_SIGNING_SECRET)=[A-Za-z0-9_-]{20,}' federation tests
